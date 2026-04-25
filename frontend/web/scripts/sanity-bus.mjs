@@ -2,7 +2,7 @@
 // mock-bus would replay them in order. Doesn't import mock-bus directly to
 // avoid pulling Next/TS into a node script — re-implements the same logic.
 //
-// Run: `node scripts/sanity-bus.mjs` from apps/web/
+// Run: `node scripts/sanity-bus.mjs` from frontend/web/
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
