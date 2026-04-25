@@ -1,0 +1,12 @@
+.env
+.env.local
+__pycache__/
+*.pyc
+.venv/
+venv/
+node_modules/
+.next/
+.DS_Store
+
+# Vapi recording source files — only the converted demo-call.mp3 is committed
+*.wav
