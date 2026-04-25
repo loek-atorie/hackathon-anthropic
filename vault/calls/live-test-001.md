@@ -1,7 +1,7 @@
 ---
 type: call
-id: test-call-0001
-recorded_at: 2026-04-25T15:43:26Z
+id: live-test-001
+recorded_at: 2026-04-25T16:04:19Z
 language: nl
 claimed_organisation: "[[ING]]"
 script: "[[bank-helpdesk]]"
@@ -11,22 +11,21 @@ payment_method: iban
 callback_number: 020-1234567
 tactics:
   - urgency
-  - authority
   - fear
+  - authority
   - pretexting
-  - social_proof
 urgency_score: 10
 is_scam: true
-is_scam_confidence: 1.0
+is_scam_confidence: 0.99
 ---
 
-# Call test-call-0001
+# Call live-test-001
 
-**Organisation claimed:** ING Bank
+**Organisation claimed:** ING
 **Script pattern:** bank-helpdesk
-**Is scam:** ⚠️ YES (confidence: 100%)
+**Is scam:** ⚠️ YES (confidence: 99%)
 **Urgency:** 10/10
-**Tactics:** urgency, authority, fear, pretexting, social_proof
+**Tactics:** urgency, fear, authority, pretexting
 
 ## Payment intel
 - IBAN: [[NL91ABNA0417164300]]

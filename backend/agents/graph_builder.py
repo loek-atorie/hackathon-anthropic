@@ -17,11 +17,35 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agents.listener import Extraction
+from agents.models import Extraction
 
 log = logging.getLogger(__name__)
 
 VAULT_ROOT = Path(os.getenv("VAULT_PATH", "/home/pskpe/hackathon-anthropic/vault"))
+
+# Canonical org names for known Dutch targets — prevents ING vs "ING Bank" split files
+_ORG_CANONICAL: dict[str, str] = {
+    "ing": "ING",
+    "ing bank": "ING",
+    "abn amro": "ABN_AMRO",
+    "abn": "ABN_AMRO",
+    "rabobank": "Rabobank",
+    "sns bank": "SNS_Bank",
+    "sns": "SNS_Bank",
+    "triodos": "Triodos",
+    "politie": "Politie",
+    "nationale politie": "Politie",
+    "belastingdienst": "Belastingdienst",
+    "postnl": "PostNL",
+    "dhl": "DHL",
+    "microsoft": "Microsoft",
+    "gemeente": "Gemeente",
+}
+
+
+def _canonical_org(org: str) -> str:
+    """Return a canonical filename-safe org name, falling back to _safe()."""
+    return _ORG_CANONICAL.get(org.lower().strip(), _safe(org))
 
 
 def _safe(name: str) -> str:
@@ -98,7 +122,7 @@ def _upsert_seen(path: Path, call_id: str, new_content_fn) -> None:
 # ── Call file ─────────────────────────────────────────────────────────────────
 
 def _call_content(call_id: str, extraction: Extraction) -> str:
-    org_link = f'"[[{_safe(extraction.claimed_organisation)}]]"' if extraction.claimed_organisation else "null"
+    org_link = f'"[[{_canonical_org(extraction.claimed_organisation)}]]"' if extraction.claimed_organisation else "null"
     iban_link = f'"[[{extraction.iban}]]"' if extraction.iban else "null"
     script_link = f'"[[{extraction.script_signature}]]"' if extraction.script_signature and extraction.script_signature != "none" else "null"
 
@@ -140,7 +164,7 @@ is_scam_confidence: {extraction.is_scam_confidence}
 - Callback: {extraction.callback_number or "—"}
 
 ## Linked entities
-- Organisation: {f"[[{_safe(extraction.claimed_organisation)}]]" if extraction.claimed_organisation else "—"}
+- Organisation: {f"[[{_canonical_org(extraction.claimed_organisation)}]]" if extraction.claimed_organisation else "—"}
 - Script: {f"[[{extraction.script_signature}]]" if extraction.script_signature and extraction.script_signature != "none" else "—"}
 """
 
@@ -227,7 +251,7 @@ def build(call_id: str, extraction: Extraction) -> list[Path]:
 
     # Organisation file — upsert
     if extraction.claimed_organisation:
-        org_path = VAULT_ROOT / "organisations" / f"{_safe(extraction.claimed_organisation)}.md"
+        org_path = VAULT_ROOT / "organisations" / f"{_canonical_org(extraction.claimed_organisation)}.md"
         _upsert_seen(org_path, call_id, lambda: _org_content(extraction.claimed_organisation, call_id))
         log.info("upserted org file: %s", org_path)
         written.append(org_path)
