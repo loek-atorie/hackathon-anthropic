@@ -16,18 +16,19 @@
 
 ## Locked decisions
 
-| Area | Decision |
-|---|---|
-| Telephony | **Vapi** with bundled Dutch DID. Backup: BE/UK number if NL provisioning stalls. |
-| Honeypot voice loop | Vapi → **Claude Sonnet 4.6** as Mevrouw Jansen. ElevenLabs voice clone (consented, ~30s sample). |
-| Persona | Mevrouw Jansen, 78, Zwolle. Late husband baker. Daughter in Australia. Slightly hard of hearing (justifies asking scammer to repeat — extends call duration). |
-| Intelligence extractor | **Reson8 MCP** (sponsor, free credits). Watches transcript stream, emits structured JSON every ~10s. |
-| Report generation | **Anthropic SDK** direct, Claude Sonnet 4.6. Generates Politie / Bank / Telco / Public reports. |
-| Knowledge graph | **Obsidian vault** of markdown files with frontmatter + `[[wikilinks]]`. Obsidian's built-in graph view IS our graph view. Stretch: in-dashboard force-directed view from same files. |
-| Adversary | **Scammer Agent** (Claude) — outbound Vapi call to Mevrouw Jansen on demo trigger. AI vs AI. |
-| Observability | None. |
-| Languages | Dutch only. |
-| Federation/SIP/voice-cloning detection | Hand-waved as roadmap. |
+Area                                  Decision
+------------------------------------  ---------------------------------------------------------------------------------
+Telephony                             Vapi with bundled Dutch DID. Backup: BE/UK number if NL provisioning stalls.
+Honeypot voice loop                   Vapi → Claude Sonnet 4.6 as Mevrouw Jansen. ElevenLabs voice clone (consented, ~30s sample).
+Persona                               Mevrouw Jansen, 78, Zwolle. Late husband baker. Daughter in Australia. Slightly hard of hearing (justifies asking scammer to repeat — extends call duration).
+Intelligence extractor                Reson8 MCP (sponsor, free credits). Watches transcript stream, emits structured JSON every ~10s.
+Report generation                     Anthropic SDK direct, Claude Sonnet 4.6. Generates Politie / Bank / Telco / Public reports.
+Knowledge graph                       Obsidian vault of markdown files with frontmatter + wikilinks. Obsidian's built-in graph view IS our graph view. Stretch: in-dashboard force-directed view from same files.
+Adversary                             Scammer Agent (Claude) — outbound Vapi call to Mevrouw Jansen on demo trigger. AI vs AI.
+Observability                         None.
+Languages                             Dutch only.
+Federation/SIP/voice-cloning detect.  Hand-waved as roadmap.
+
 
 ---
 
