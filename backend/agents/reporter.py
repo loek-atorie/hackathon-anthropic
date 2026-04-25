@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 
 _client = anthropic.AsyncAnthropic()
 
-PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8000/publish")
+PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8080/publish")
 _DEFAULT_VAULT = Path(__file__).resolve().parents[2] / "vault"
 VAULT_ROOT = Path(os.getenv("VAULT_PATH", str(_DEFAULT_VAULT)))
 
