@@ -10,3 +10,6 @@ node_modules/
 
 # Vapi recording source files — only the converted demo-call.mp3 is committed
 *.wav
+
+# Git worktrees
+.worktrees/
