@@ -86,3 +86,104 @@ body::before {
 *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Prose styling for the markdown drawer body (dark mode). */
+.prose-scammer {
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.prose-scammer h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+.prose-scammer h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: var(--foreground);
+}
+.prose-scammer h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 16px 0 6px;
+  color: var(--muted);
+}
+.prose-scammer p {
+  margin: 0 0 12px;
+  color: var(--foreground);
+}
+.prose-scammer ul,
+.prose-scammer ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.prose-scammer ul {
+  list-style: disc;
+}
+.prose-scammer ol {
+  list-style: decimal;
+}
+.prose-scammer li {
+  margin: 4px 0;
+}
+.prose-scammer blockquote {
+  border-left: 2px solid var(--accent);
+  padding: 4px 12px;
+  margin: 12px 0;
+  color: var(--muted);
+  background: var(--accent-soft);
+  border-radius: 0 6px 6px 0;
+}
+.prose-scammer code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  padding: 1px 5px;
+  background: var(--background-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.prose-scammer pre {
+  background: var(--background-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
+.prose-scammer pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.prose-scammer a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-scammer table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.prose-scammer th,
+.prose-scammer td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.prose-scammer th {
+  background: var(--background-card);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
