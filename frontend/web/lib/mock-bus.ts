@@ -21,11 +21,38 @@ interface SubscribeOptions {
   speed?: number;
 }
 
+const VALID_TYPES = new Set<BusEvent["type"]>([
+  "transcript_delta",
+  "extraction_update",
+  "call_ended",
+  "graph_node_added",
+]);
+
+function assertTimedBusEvent(value: unknown, source: string): TimedBusEvent {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`Invalid bus event in ${source}: not an object`);
+  }
+  const v = value as Record<string, unknown>;
+  if (typeof v.type !== "string" || !VALID_TYPES.has(v.type as BusEvent["type"])) {
+    throw new Error(`Invalid bus event in ${source}: unknown type "${String(v.type)}"`);
+  }
+  if (typeof v.call_id !== "string") {
+    throw new Error(`Invalid bus event in ${source}: missing call_id`);
+  }
+  if (typeof v.t_offset_ms !== "number") {
+    throw new Error(`Invalid bus event in ${source}: missing t_offset_ms`);
+  }
+  return value as TimedBusEvent;
+}
+
 function loadFixtureEvents(): TimedBusEvent[] {
-  const all = [
-    ...(transcriptFixture as TimedBusEvent[]),
-    ...(extractionsFixture as TimedBusEvent[]),
-  ];
+  const transcript = (transcriptFixture as unknown[]).map((e) =>
+    assertTimedBusEvent(e, "transcript.json"),
+  );
+  const extractions = (extractionsFixture as unknown[]).map((e) =>
+    assertTimedBusEvent(e, "extractions.json"),
+  );
+  const all = [...transcript, ...extractions];
   // Sort by t_offset_ms ascending so handlers get a coherent timeline.
   return all.sort((a, b) => a.t_offset_ms - b.t_offset_ms);
 }
@@ -37,7 +64,6 @@ export function subscribe(
   const { startAt = 0, speed = 1 } = options;
   const events = loadFixtureEvents();
   const timeouts: ReturnType<typeof setTimeout>[] = [];
-  const t0 = performance.now();
 
   for (const event of events) {
     if (event.t_offset_ms < startAt) continue;
@@ -47,9 +73,6 @@ export function subscribe(
     }, delay);
     timeouts.push(id);
   }
-
-  // Reference t0 to keep eslint happy and to be useful for debugging.
-  void t0;
 
   return function unsubscribe() {
     for (const id of timeouts) clearTimeout(id);
