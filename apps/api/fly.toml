@@ -1,0 +1,29 @@
+# P1 — Vapi-facing webhook router. No volume needed.
+# Set the app name with `fly launch --no-deploy` (or rename here before launch).
+app = "whale-p1"
+primary_region = "ams"
+
+[build]
+
+[env]
+  PORT = "8080"
+  # Set after P2 is deployed; uses Fly's internal DNS so traffic stays private.
+  # Example: P2_INGEST_URL = "http://whale-p2.internal:8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "get"
+    path = "/healthz"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -5,3 +5,4 @@ anthropic
 httpx
 pydantic
 python-dotenv
+python-frontmatter

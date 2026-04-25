@@ -1,73 +1,42 @@
-// Server-side report reader. Reads stakeholder markdown reports from
-// vault/_reports/<callId>-<stakeholder>.md in the repo root.
+// Server-side report reader. Fetches stakeholder markdown reports from the
+// P2 backend (which owns the vault volume on Fly).
 //
-// IMPORTANT: do not import this from a client component. It uses node:fs.
+// IMPORTANT: do not import this from a client component. It uses server-only
+// env (BACKEND_URL).
 
 import "server-only";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 
 const STAKEHOLDERS = ["politie", "bank", "telco", "public"] as const;
 type Stakeholder = (typeof STAKEHOLDERS)[number];
 
 export type ReportMap = Record<Stakeholder, string>;
 
-function reportsDir(): string {
-  // This file lives at frontend/web/lib/report-reader.ts.
-  // process.cwd() during `next dev` / `next build` is frontend/web/, so the
-  // vault lives two levels up.
-  // turbopackIgnore: true — we intentionally use fs; don't trace the whole tree.
-  return path.resolve(/* turbopackIgnore: true */ process.cwd(), "..", "..", "vault", "_reports");
+function backendUrl(): string {
+  const url = process.env.BACKEND_URL;
+  if (!url) {
+    throw new Error("BACKEND_URL is not set — point it at the P2 backend (e.g. https://whale-p2.fly.dev)");
+  }
+  return url.replace(/\/$/, "");
 }
 
-/**
- * Reads all four stakeholder reports for a given call ID.
- * Returns a map of { politie, bank, telco, public } → markdown string.
- * If a file is missing or unreadable, returns an empty string for that key.
- */
 export async function loadReports(callId: string): Promise<ReportMap> {
-  const dir = reportsDir();
-
-  const results = await Promise.all(
-    STAKEHOLDERS.map(async (stakeholder) => {
-      const filePath = path.join(dir, `${callId}-${stakeholder}.md`);
-      try {
-        const content = await fs.readFile(filePath, "utf8");
-        return [stakeholder, content] as const;
-      } catch {
-        // File missing or unreadable — return empty string, don't throw.
-        return [stakeholder, ""] as const;
-      }
-    }),
-  );
-
-  return Object.fromEntries(results) as ReportMap;
+  const res = await fetch(`${backendUrl()}/api/reports/${encodeURIComponent(callId)}`, {
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    // Mirror the old behaviour: a missing/unreadable report yields empty strings,
+    // not a hard error.
+    return Object.fromEntries(STAKEHOLDERS.map((s) => [s, ""])) as ReportMap;
+  }
+  const data = (await res.json()) as Partial<ReportMap>;
+  return Object.fromEntries(
+    STAKEHOLDERS.map((s) => [s, typeof data[s] === "string" ? (data[s] as string) : ""]),
+  ) as ReportMap;
 }
 
-/**
- * Scans vault/_reports/ and returns a sorted list of unique call IDs
- * (most recent first — relies on lexicographic sort of call-NNNN format).
- */
 export async function listReportCallIds(): Promise<string[]> {
-  const dir = reportsDir();
-  let entries: string[];
-  try {
-    entries = await fs.readdir(dir);
-  } catch {
-    return [];
-  }
-
-  const ids = new Set<string>();
-  for (const filename of entries) {
-    if (!filename.endsWith(".md")) continue;
-    // Filename pattern: <callId>-<stakeholder>.md
-    // Stakeholders are exactly: politie, bank, telco, public
-    const match = filename.match(/^(.+)-(politie|bank|telco|public)\.md$/);
-    if (match) {
-      ids.add(match[1]);
-    }
-  }
-
-  // Sort descending (most recent first) — works for call-NNNN lexicographic order.
-  return Array.from(ids).sort((a, b) => b.localeCompare(a));
+  const res = await fetch(`${backendUrl()}/api/reports`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const ids = (await res.json()) as unknown;
+  return Array.isArray(ids) ? (ids.filter((x) => typeof x === "string") as string[]) : [];
 }
