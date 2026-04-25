@@ -31,7 +31,7 @@ export default function RootLayout({
       className={`dark ${geistSans.variable} ${geistMono.variable} h-full antialiased`}
       style={{ colorScheme: "dark" }}
     >
-      <body className="relative min-h-full flex flex-col">
+      <body className="relative h-full flex flex-col">
         <TopNav />
         <main className="relative z-10 flex flex-1 flex-col">{children}</main>
         <Toaster

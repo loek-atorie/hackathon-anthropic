@@ -7,7 +7,6 @@ const NAV_ITEMS = [
   { href: "/live", label: "Live" },
   { href: "/graph", label: "Graph" },
   { href: "/reports", label: "Reports" },
-  { href: "/public", label: "Public" },
 ];
 
 export function TopNav() {

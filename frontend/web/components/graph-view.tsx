@@ -160,10 +160,10 @@ export function GraphView({ initialData }: GraphViewProps) {
       <header className="z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)]/70 px-6 py-4 backdrop-blur">
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-            Inlichtingen
+            Intelligence
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
-            Kennisgraaf
+            Knowledge Graph
           </h1>
         </div>
 

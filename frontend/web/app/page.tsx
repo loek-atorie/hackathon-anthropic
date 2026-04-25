@@ -1,64 +1,175 @@
-import Link from "next/link";
+import { ScammerMinutesCounter } from "@/components/counter";
+import { tacticStyle } from "@/lib/tactic-styles";
+
+interface CallSummary {
+  id: string;
+  time: string;
+  claimedBank: string;
+  tactics: string[];
+  durationMin: number;
+}
+
+const RECENT_CALLS: CallSummary[] = [
+  {
+    id: "call-0040",
+    time: "vandaag 15:18",
+    claimedBank: "ABN AMRO",
+    tactics: ["urgency", "authority", "fear"],
+    durationMin: 6,
+  },
+  {
+    id: "call-0039",
+    time: "vandaag 09:50",
+    claimedBank: "ING",
+    tactics: ["urgency", "fear"],
+    durationMin: 3,
+  },
+  {
+    id: "call-0038",
+    time: "gisteren 11:04",
+    claimedBank: "ING",
+    tactics: ["urgency", "authority"],
+    durationMin: 5,
+  },
+  {
+    id: "call-0037",
+    time: "gisteren 16:33",
+    claimedBank: "ING",
+    tactics: ["authority", "fear"],
+    durationMin: 7,
+  },
+  {
+    id: "call-0035",
+    time: "di 10:40",
+    claimedBank: "ING",
+    tactics: ["urgency", "authority"],
+    durationMin: 6,
+  },
+  {
+    id: "call-0034",
+    time: "ma 13:11",
+    claimedBank: "KPN",
+    tactics: ["authority", "technical"],
+    durationMin: 4,
+  },
+];
+
+function CallCard({ call }: { call: CallSummary }) {
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-xl border p-4 transition-colors"
+      style={{
+        background: "var(--card)",
+        borderColor: "var(--border)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-0.5">
+          <span
+            className="text-xs font-medium tabular-nums"
+            style={{ color: "var(--muted)" }}
+          >
+            {call.time}
+          </span>
+          <span
+            className="text-sm font-semibold"
+            style={{ color: "var(--foreground)" }}
+          >
+            {call.claimedBank}
+          </span>
+        </div>
+        <span
+          className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium tabular-nums"
+          style={{
+            background: "var(--background-elev)",
+            color: "var(--muted)",
+            border: "1px solid var(--border)",
+          }}
+        >
+          {call.durationMin} min
+        </span>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {call.tactics.map((t) => {
+          const style = tacticStyle(t);
+          return (
+            <span
+              key={t}
+              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize"
+              style={{
+                background: style.bg,
+                color: style.text,
+                border: `1px solid ${style.border}`,
+              }}
+            >
+              {t}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="relative flex flex-1 items-center justify-center overflow-hidden px-6 py-24">
-      <div className="relative z-10 mx-auto flex w-full max-w-3xl flex-col items-start gap-8">
-        <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--background-elev)] px-3 py-1 text-xs text-[var(--muted)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)] shadow-[0_0_10px_var(--accent)]" />
-          Live demo · NL
-        </div>
-
+    <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col px-6 py-16">
+      <section className="mb-16">
         <h1 className="text-4xl font-semibold leading-[1.05] tracking-tight text-[var(--foreground)] sm:text-6xl">
           The Scammer&rsquo;s Mirror.
           <br />
-          <span className="text-[var(--muted)]">
-            They call. We listen.
-          </span>
+          <span className="text-[var(--muted)]">They call. We listen.</span>
         </h1>
-
-        <p className="max-w-xl text-lg leading-7 text-[var(--muted)]">
-          AI honeypots that hunt scammers — every call becomes a case file
-          for the police, the bank, and the public. EU-sovereign, open by
-          default, federation-ready.
+        <p className="mt-4 max-w-xl text-lg leading-7 text-[var(--muted)]">
+          AI honeypots that hunt scammers — every call becomes a case file for
+          the police, the bank, and the public.
         </p>
+      </section>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            href="/live"
-            className="inline-flex h-11 items-center justify-center rounded-md bg-[var(--accent)] px-5 text-sm font-medium text-[var(--accent-ink)] transition hover:brightness-110"
+      <section className="flex flex-1 flex-col items-center justify-center pb-16 pt-8">
+        <ScammerMinutesCounter />
+      </section>
+
+      <section className="mx-auto mb-12 max-w-2xl">
+        <blockquote
+          className="border-l-2 pl-5 text-xl font-medium italic leading-relaxed"
+          style={{
+            borderColor: "var(--accent)",
+            color: "var(--foreground)",
+          }}
+        >
+          &ldquo;Every minute is a minute they&rsquo;re not scamming
+          someone&rsquo;s grandmother.&rdquo;
+        </blockquote>
+      </section>
+
+      <section className="pb-16">
+        <div className="mb-4 flex items-center gap-3">
+          <span
+            className="text-[11px] font-medium uppercase tracking-[0.18em]"
+            style={{ color: "var(--accent)" }}
           >
-            Open the live call
-          </Link>
-          <Link
-            href="/graph"
-            className="inline-flex h-11 items-center justify-center rounded-md border border-[var(--border-strong)] px-5 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            Recent calls
+          </span>
+          <span
+            className="h-px flex-1"
+            style={{ background: "var(--border)" }}
+          />
+          <span
+            className="text-[11px]"
+            style={{ color: "var(--muted-2)" }}
           >
-            See the graph
-          </Link>
+            anonymised · network-wide
+          </span>
         </div>
 
-        <div className="mt-10 grid w-full grid-cols-2 gap-px overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--border)] sm:grid-cols-4">
-          {[
-            { k: "Honeypots", v: "50" },
-            { k: "Calls today", v: "37" },
-            { k: "IBANs flagged", v: "112" },
-            { k: "Minutes wasted", v: "4,287" },
-          ].map((stat) => (
-            <div
-              key={stat.k}
-              className="flex flex-col gap-1 bg-[var(--background)] p-4"
-            >
-              <span className="text-[11px] uppercase tracking-[0.16em] text-[var(--muted)]">
-                {stat.k}
-              </span>
-              <span className="font-mono text-2xl tabular-nums text-[var(--foreground)]">
-                {stat.v}
-              </span>
-            </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {RECENT_CALLS.map((call) => (
+            <CallCard key={call.id} call={call} />
           ))}
         </div>
-      </div>
+      </section>
     </div>
   );
 }
