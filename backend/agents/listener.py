@@ -180,17 +180,23 @@ async def process_and_publish(transcript: str, call_id: str) -> Extraction:
             )
             log.info("vault: %d files written for %s", len(files), call_id)
 
-            # Notify SSE consumers that the graph has new nodes
-            graph_payload = {
-                "type": "graph_update",
-                "call_id": call_id,
-                "files_written": [str(f) for f in files],
-            }
+            # Emit graph_node_added for each file so the frontend graph updates live
             async with httpx.AsyncClient() as http:
-                try:
-                    await http.post(PUBLISH_URL, json=graph_payload, timeout=5.0)
-                except httpx.ConnectError:
-                    pass
+                for file_path in files:
+                    p = file_path if hasattr(file_path, "parts") else __import__("pathlib").Path(file_path)
+                    node_type = p.parent.name   # e.g. "calls", "ibans", "scripts"
+                    node_id = p.stem            # e.g. "call-0042", "NL91ABNA..."
+                    node_event = {
+                        "type": "graph_node_added",
+                        "call_id": call_id,
+                        "node_id": node_id,
+                        "node_type": node_type,
+                        "markdown_path": str(p),
+                    }
+                    try:
+                        await http.post(PUBLISH_URL, json=node_event, timeout=5.0)
+                    except httpx.ConnectError:
+                        pass
         except Exception as exc:
             log.error("vault write failed for %s: %s", call_id, exc)
 

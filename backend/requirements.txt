@@ -4,3 +4,4 @@ sse-starlette
 anthropic
 httpx
 pydantic
+python-dotenv
