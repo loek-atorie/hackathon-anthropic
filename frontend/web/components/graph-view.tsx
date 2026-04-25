@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ForceGraph, NODE_COLORS, NODE_TYPE_LABELS } from "./force-graph";
 import { MarkdownDrawer } from "./markdown-drawer";
-import { subscribe } from "@/lib/mock-bus";
+import { useBus } from "@/lib/sse";
 import type { GraphData, GraphNode, GraphNodeType } from "@/lib/vault-reader";
 
 interface GraphViewProps {
@@ -41,17 +41,49 @@ Eerste keer dat we een terugbel-nummer (+31 20 555 0142) extraheren — handig v
 `,
 };
 
-const DEMO_TARGET_IDS = ["ING", "NL12RABO0123456789", "bank-helpdesk-v3", "scammer-voice-A7"];
+const DEMO_TARGET_IDS = ["ING", "NL12RABO0123456789", "bank-helpdesk-v3"];
 
 const HIGHLIGHT_DURATION_MS = 4500;
 
+function isCallEnded(e: { type: string }): boolean {
+  return e.type === "call_ended";
+}
+
 export function GraphView({ initialData }: GraphViewProps) {
-  // Live graph state — starts at initialData, may grow when call_ended fires.
-  const [extraNodes, setExtraNodes] = useState<GraphNode[]>([]);
-  const [extraEdges, setExtraEdges] = useState<GraphData["edges"]>([]);
-  const [highlightIds, setHighlightIds] = useState<Set<string>>(new Set());
+  // highlightFaded tracks whether the post-call_ended highlight has expired.
+  // It starts false; the timeout callback (not the effect body) sets it true,
+  // which satisfies react-hooks/set-state-in-effect.
+  const [highlightFaded, setHighlightFaded] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [busVersion, setBusVersion] = useState(0);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { events, reset: resetBus } = useBus();
+
+  // Derive whether a call_ended event has been seen. This drives node/edge
+  // insertion via useMemo below — no setState needed in an effect.
+  const callEndedSeen = useMemo(() => events.some(isCallEnded), [events]);
+
+  // Derive extra nodes and edges purely from callEndedSeen + initialData.
+  const extraNodes = useMemo<GraphNode[]>(() => {
+    if (!callEndedSeen) return [];
+    if (initialData.nodes.some((n) => n.id === DEMO_CALL_ID)) return [];
+    return [DEMO_CALL_NODE];
+  }, [callEndedSeen, initialData.nodes]);
+
+  const extraEdges = useMemo<GraphData["edges"]>(() => {
+    if (!callEndedSeen) return [];
+    if (initialData.nodes.some((n) => n.id === DEMO_CALL_ID)) return [];
+    return DEMO_TARGET_IDS.filter((target) =>
+      initialData.nodes.some((n) => n.id === target),
+    ).map((target) => ({ source: DEMO_CALL_ID, target, kind: "wikilink" as const }));
+  }, [callEndedSeen, initialData.nodes]);
+
+  // Highlight the new call node until the timer fires. highlightFaded is only
+  // ever set inside the setTimeout callback, not synchronously in the effect.
+  const highlightIds = useMemo(
+    () => (callEndedSeen && !highlightFaded ? new Set([DEMO_CALL_ID]) : new Set<string>()),
+    [callEndedSeen, highlightFaded],
+  );
 
   const data = useMemo<GraphData>(
     () => ({
@@ -71,51 +103,30 @@ export function GraphView({ initialData }: GraphViewProps) {
 
   const selectedNode = selectedId ? (nodeById.get(selectedId) ?? null) : null;
 
-  // Subscribe directly to the bus and react to call_ended by inserting the
-  // demo call node + its edges. setState lives inside the bus callback (not
-  // the effect body), which is the React-recommended pattern.
+  // Schedule the highlight-fade. setState only fires inside the timeout
+  // callback, satisfying react-hooks/set-state-in-effect.
   useEffect(() => {
-    let highlightTimeout: ReturnType<typeof setTimeout> | null = null;
-    let inserted = false;
-
-    const unsubscribe = subscribe((event) => {
-      if (event.type !== "call_ended" || inserted) return;
-      inserted = true;
-
-      // Skip if call-0042 already exists (e.g. someone added it to vault).
-      if (initialData.nodes.some((n) => n.id === DEMO_CALL_ID)) return;
-
-      setExtraNodes([DEMO_CALL_NODE]);
-      setExtraEdges(
-        DEMO_TARGET_IDS.filter((target) =>
-          initialData.nodes.some((n) => n.id === target),
-        ).map((target) => ({
-          source: DEMO_CALL_ID,
-          target,
-          kind: "wikilink" as const,
-        })),
-      );
-      setHighlightIds(new Set([DEMO_CALL_ID]));
-
-      highlightTimeout = setTimeout(() => {
-        setHighlightIds(new Set());
-      }, HIGHLIGHT_DURATION_MS);
-    });
-
+    if (!callEndedSeen) return;
+    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+    highlightTimeoutRef.current = setTimeout(
+      () => setHighlightFaded(true),
+      HIGHLIGHT_DURATION_MS,
+    );
     return () => {
-      unsubscribe();
-      if (highlightTimeout) clearTimeout(highlightTimeout);
+      if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
     };
-  }, [initialData, busVersion]);
+  }, [callEndedSeen]);
 
   // Reset both the bus and the dynamic additions.
   const handleReset = useCallback(() => {
-    setExtraNodes([]);
-    setExtraEdges([]);
-    setHighlightIds(new Set());
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+    setHighlightFaded(false);
     setSelectedId(null);
-    setBusVersion((v) => v + 1);
-  }, []);
+    resetBus();
+  }, [resetBus]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
     setSelectedId(node.id);
@@ -147,10 +158,10 @@ export function GraphView({ initialData }: GraphViewProps) {
       <header className="z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)]/70 px-6 py-4 backdrop-blur">
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-            Intelligence
+            Inlichtingen
           </span>
           <h1 className="text-xl font-semibold tracking-tight text-[var(--foreground)]">
-            Knowledge graph
+            Kennisgraaf
           </h1>
         </div>
 
@@ -159,12 +170,12 @@ export function GraphView({ initialData }: GraphViewProps) {
             <span className="font-mono tabular-nums text-[var(--foreground)]">
               {data.nodes.length}
             </span>
-            <span className="text-[var(--muted)]">nodes</span>
+            <span className="text-[var(--muted)]">knooppunten</span>
             <span className="text-[var(--border-strong)]">·</span>
             <span className="font-mono tabular-nums text-[var(--foreground)]">
               {data.edges.length}
             </span>
-            <span className="text-[var(--muted)]">edges</span>
+            <span className="text-[var(--muted)]">verbindingen</span>
           </div>
 
           <div className="hidden items-center gap-3 border-l border-[var(--border)] pl-4 md:flex">

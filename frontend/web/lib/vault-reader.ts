@@ -45,9 +45,9 @@ const WIKILINK_RE = /\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]/g;
 
 function repoRoot(): string {
   // This file lives at frontend/web/lib/vault-reader.ts — repo root is two
-  // directories up from frontend/web/.
+  // directories up from frontend/web/ (which is process.cwd() during next build).
   // turbopackIgnore: true — we intentionally use fs; don't trace the whole tree.
-  return path.resolve(/* turbopackIgnore: true */ process.cwd());
+  return path.resolve(/* turbopackIgnore: true */ process.cwd(), "..", "..");
 }
 
 function vaultRoot(): string {

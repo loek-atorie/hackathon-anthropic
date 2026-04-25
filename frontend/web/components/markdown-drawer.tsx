@@ -153,7 +153,7 @@ export function MarkdownDrawer({ node, knownIds, onClose, onWikilinkClick }: Mar
               {/* Frontmatter section */}
               <section className="border-b border-[var(--border)] px-6 py-5">
                 <h3 className="mb-3 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
-                  Frontmatter
+                  Metagegevens
                 </h3>
                 <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2.5">
                   {Object.entries(node.frontmatter).map(([key, value]) => (
