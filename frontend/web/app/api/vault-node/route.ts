@@ -44,6 +44,10 @@ function repoRoot(): string {
   return path.resolve(process.cwd(), "..", "..");
 }
 
+function vaultRoot(): string {
+  return path.join(repoRoot(), "vault");
+}
+
 function typeFromPath(relPath: string): GraphNodeType | null {
   // relPath is like "vault/calls/call-0042.md"
   const parts = relPath.split("/");
@@ -84,8 +88,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "missing path param" }, { status: 400 });
   }
 
-  // Prevent path traversal — relPath must start with "vault/"
-  if (!relPath.startsWith("vault/") || relPath.includes("..")) {
+  // Prevent path traversal: resolve to absolute and verify it's inside vault/
+  const fullPath = path.join(repoRoot(), relPath);
+  if (!fullPath.startsWith(vaultRoot() + path.sep) && fullPath !== vaultRoot()) {
     return NextResponse.json({ error: "invalid path" }, { status: 400 });
   }
 
@@ -93,8 +98,6 @@ export async function GET(req: NextRequest) {
   if (!nodeType) {
     return NextResponse.json({ error: "unrecognised vault path" }, { status: 400 });
   }
-
-  const fullPath = path.join(repoRoot(), relPath);
   let raw: string;
   try {
     raw = await fs.readFile(fullPath, "utf8");
@@ -114,18 +117,23 @@ export async function GET(req: NextRequest) {
 
   const node: GraphNode = { id, type: nodeType, label, path: relPath, frontmatter: fm, body };
 
-  // Build edges: wikilinks that resolve to known IDs
-  const knownIds = new Set(knownIdsParam ? knownIdsParam.split(",").filter(Boolean) : []);
+  // Build edges: wikilinks that resolve to known IDs (case-insensitive)
+  const knownIdsLower = new Map<string, string>(
+    knownIdsParam
+      ? knownIdsParam.split(",").filter(Boolean).map((id) => [id.toLowerCase(), id])
+      : []
+  );
   const links = [...frontmatterWikilinks(fm), ...extractWikilinks(body)];
   const seenEdges = new Set<string>();
   const edges: GraphEdge[] = [];
   for (const link of links) {
-    if (!knownIds.has(link)) continue;
-    if (link === id) continue;
-    const key = [id, link].sort().join("|");
+    const canonical = knownIdsLower.get(link.toLowerCase());
+    if (!canonical) continue;
+    if (canonical === id) continue;
+    const key = [id, canonical].sort().join("|");
     if (seenEdges.has(key)) continue;
     seenEdges.add(key);
-    edges.push({ source: id, target: link, kind: "wikilink" });
+    edges.push({ source: id, target: canonical, kind: "wikilink" });
   }
 
   return NextResponse.json({ node, edges });
