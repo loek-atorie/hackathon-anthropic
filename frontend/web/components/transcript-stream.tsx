@@ -53,6 +53,9 @@ export function TranscriptStream({ events }: TranscriptStreamProps) {
   return (
     <div
       ref={scrollRef}
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
       className="relative flex h-full flex-col gap-4 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--background-elev)] px-5 py-6 sm:px-8"
     >
       {events.length === 0 && (

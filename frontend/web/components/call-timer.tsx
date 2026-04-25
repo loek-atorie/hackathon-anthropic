@@ -46,20 +46,25 @@ export function CallTimer({
   if (sessionKey !== prevSessionKey) {
     setPrevSessionKey(sessionKey);
     setStartWallClockMs(null);
-  } else if (startWallClockMs === null && latestEventMs !== null) {
-    // First event of this session — capture the anchor. `now` is captured
-    // on mount via the lazy `useState` initializer above; close enough to
-    // wall-clock for our 4-minute demo timer.
-    setStartWallClockMs(now - latestEventMs);
   }
 
-  // Tick while live.
+  // Tick while live, and capture the anchor from a fresh Date.now() reading
+  // on the first event of the session. We do this in an effect (rather than
+  // during render) because Date.now() is impure; using the existing `now`
+  // state would skip the timer ahead by however long it took the first event
+  // to arrive after mount.
   useEffect(() => {
     if (endedAtSeconds !== null) return;
-    if (startWallClockMs === null) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
+    if (latestEventMs === null) return;
+    const tick = () => {
+      const wallNow = Date.now();
+      setStartWallClockMs((prev) => (prev === null ? wallNow - latestEventMs : prev));
+      setNow(wallNow);
+    };
+    tick();
+    const id = setInterval(tick, 250);
     return () => clearInterval(id);
-  }, [endedAtSeconds, startWallClockMs]);
+  }, [endedAtSeconds, latestEventMs]);
 
   let displaySeconds = 0;
   if (endedAtSeconds !== null) {

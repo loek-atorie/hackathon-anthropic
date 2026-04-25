@@ -26,8 +26,7 @@ export default function LivePage() {
   );
 
   const latestEventMs = latest && "t_offset_ms" in latest ? latest.t_offset_ms : null;
-  const endedAtSeconds =
-    callEnded && callEnded.type === "call_ended" ? callEnded.duration_s : null;
+  const endedAtSeconds = callEnded?.duration_s ?? null;
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-6 px-6 py-6">
@@ -52,7 +51,7 @@ export default function LivePage() {
         <button
           type="button"
           onClick={reset}
-          className="inline-flex h-9 w-fit items-center justify-center gap-2 rounded-md border border-[var(--border-strong)] bg-[var(--background-elev)] px-4 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+          className="inline-flex h-9 w-fit items-center justify-center gap-2 rounded-md border border-[var(--border-strong)] bg-[var(--background-elev)] px-4 text-sm font-medium text-[var(--foreground)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
         >
           <svg
             aria-hidden
