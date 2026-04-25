@@ -6,6 +6,9 @@ export async function GET(
   { params }: { params: Promise<{ callId: string }> },
 ) {
   const { callId } = await params;
+  if (!/^[\w-]+$/.test(callId)) {
+    return Response.json({ error: "Invalid callId" }, { status: 400 });
+  }
   const reports = await loadReports(callId);
   return Response.json(reports);
 }

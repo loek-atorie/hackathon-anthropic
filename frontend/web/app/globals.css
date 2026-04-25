@@ -229,7 +229,7 @@ body::before {
 
 /* Extended prose for report tabs — larger body text, more breathing room. */
 .prose-report {
-  color: #e8e8e8;
+  color: var(--foreground);
   font-size: 16px;
   line-height: 1.8;
 }
@@ -237,7 +237,7 @@ body::before {
   font-size: 22px;
   font-weight: 700;
   margin: 0 0 20px;
-  color: #e8eaed;
+  color: var(--foreground);
   letter-spacing: -0.02em;
   border-bottom: 1px solid var(--border-strong);
   padding-bottom: 12px;
@@ -246,7 +246,7 @@ body::before {
   font-size: 17px;
   font-weight: 600;
   margin: 28px 0 10px;
-  color: #e8eaed;
+  color: var(--foreground);
 }
 .prose-report h3 {
   font-size: 13px;
@@ -258,7 +258,7 @@ body::before {
 }
 .prose-report p {
   margin: 0 0 16px;
-  color: #e8e8e8;
+  color: var(--foreground);
 }
 .prose-report ul,
 .prose-report ol {
@@ -273,10 +273,10 @@ body::before {
 }
 .prose-report li {
   margin: 6px 0;
-  color: #e8e8e8;
+  color: var(--foreground);
 }
 .prose-report strong {
-  color: #e8eaed;
+  color: var(--foreground);
   font-weight: 600;
 }
 .prose-report blockquote {
