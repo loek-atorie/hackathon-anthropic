@@ -19,7 +19,7 @@ log = logging.getLogger(__name__)
 
 import anthropic
 import httpx
-from agents import graph_builder, interrogator, reporter
+from agents import graph_builder, interrogator, reporter, voiceprint
 from agents.models import Extraction
 
 PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8000/publish")
@@ -205,6 +205,12 @@ async def process_and_publish(transcript: str, call_id: str) -> Extraction:
         await reporter.generate_reports(call_id, extraction)
     except Exception as exc:
         log.error("reporter failed for %s: %s", call_id, exc)
+
+    # Voiceprint cluster (mock)
+    try:
+        await voiceprint.fingerprint(call_id, extraction)
+    except Exception as exc:
+        log.error("voiceprint failed for %s: %s", call_id, exc)
 
     return extraction
 
