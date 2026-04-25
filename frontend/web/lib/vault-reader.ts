@@ -8,8 +8,9 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
+import type { GraphNodeType } from "@/lib/types";
 
-export type GraphNodeType = "call" | "scammer" | "iban" | "bank" | "script";
+export type { GraphNodeType };
 
 export interface GraphNode {
   id: string;
@@ -70,7 +71,8 @@ async function listMarkdown(dir: string): Promise<string[]> {
 function extractWikilinks(text: string): string[] {
   const out: string[] = [];
   for (const m of text.matchAll(WIKILINK_RE)) {
-    out.push(m[1].trim());
+    const trimmed = m[1].trim();
+    if (trimmed) out.push(trimmed);
   }
   return out;
 }
@@ -107,7 +109,12 @@ async function parseFile(
 ): Promise<ParsedFile> {
   const raw = await fs.readFile(fullPath, "utf8");
   const parsed = matter(raw);
-  const fm = (parsed.data ?? {}) as Record<string, unknown>;
+  const fm = Object.fromEntries(
+    Object.entries(parsed.data ?? {}).map(([k, v]) => [
+      k,
+      v instanceof Date ? v.toISOString() : v,
+    ])
+  ) as Record<string, unknown>;
   const body = parsed.content ?? "";
   const links = [...frontmatterWikilinks(fm), ...extractWikilinks(body)];
   const relPath = path.relative(rootForRel, fullPath);
@@ -212,7 +219,7 @@ export async function loadVault(): Promise<GraphData> {
         continue;
       }
       if (target.id === sourceNode.id) continue;
-      const key = `${sourceNode.id}|${target.id}`;
+      const key = [sourceNode.id, target.id].sort().join("|");
       if (seenEdges.has(key)) continue;
       seenEdges.add(key);
       edges.push({ source: sourceNode.id, target: target.id, kind: "wikilink" });

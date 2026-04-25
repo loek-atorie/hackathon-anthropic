@@ -139,6 +139,8 @@ export function GraphView({ initialData }: GraphViewProps) {
     [knownIds],
   );
 
+  const handleCloseDrawer = useCallback(() => setSelectedId(null), []);
+
   // Counts per type (for the legend).
   const counts = useMemo(() => {
     const m: Record<GraphNodeType, number> = {
@@ -227,7 +229,7 @@ export function GraphView({ initialData }: GraphViewProps) {
       <MarkdownDrawer
         node={selectedNode}
         knownIds={knownIds}
-        onClose={() => setSelectedId(null)}
+        onClose={handleCloseDrawer}
         onWikilinkClick={handleWikilinkClick}
       />
     </div>

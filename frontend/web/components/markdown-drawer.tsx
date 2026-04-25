@@ -19,9 +19,10 @@ interface MarkdownDrawerProps {
  * `[label](#wikilink:id)` that we can intercept inside react-markdown.
  */
 function preprocessWikilinks(body: string): string {
-  return body.replace(/\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g, (_m, id, label) => {
-    const text = (label ?? id).trim();
+  return body.replace(/\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g, (match, id, label) => {
     const target = String(id).trim();
+    if (!target) return match;
+    const text = (label ?? id).trim();
     return `[${text}](#wikilink:${encodeURIComponent(target)})`;
   });
 }
