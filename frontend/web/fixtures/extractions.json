@@ -9,5 +9,5 @@
   { "type": "extraction_update", "call_id": "call-0042", "t_offset_ms": 113000, "field": "iban", "value": "NL12RABO0123456789" },
   { "type": "extraction_update", "call_id": "call-0042", "t_offset_ms": 195000, "field": "urgency_score", "value": 0.9 },
   { "type": "extraction_update", "call_id": "call-0042", "t_offset_ms": 211000, "field": "callback_number", "value": "+31 20 555 0142" },
-  { "type": "graph_node_added", "call_id": "call-0042", "node_id": "call-0031", "node_type": "call", "markdown_path": "vault/calls/call-0031.md", "t_offset_ms": 246000 }
+  { "type": "graph_node_added", "call_id": "call-0042", "node_id": "call-0031", "node_type": "call", "markdown_path": "vault/calls/2026-04-18T11-04-call-0031.md", "t_offset_ms": 246000 }
 ]

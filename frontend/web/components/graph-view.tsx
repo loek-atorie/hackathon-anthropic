@@ -60,7 +60,10 @@ export function GraphView({ initialData }: GraphViewProps) {
         const url = `/api/vault-node?path=${encodeURIComponent(markdown_path)}&knownIds=${encodeURIComponent(knownIdsParam)}`;
 
         fetch(url)
-          .then((r) => r.json())
+          .then((r) => {
+            if (!r.ok) throw new Error(`vault-node ${r.status}`);
+            return r.json();
+          })
           .then(({ node, edges }: { node: GraphNode; edges: GraphEdge[] }) => {
             setDynamicNodes((prev) => {
               if (prev.some((n) => n.id === node.id)) return prev;
