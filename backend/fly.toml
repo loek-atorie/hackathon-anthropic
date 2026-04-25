@@ -1,6 +1,6 @@
 # P2 — agent processing + vault writes + dashboard SSE source.
 # Set the app name with `fly launch --no-deploy` (or rename here before launch).
-app = "whale-p2"
+app = "whale-p2-diari"
 primary_region = "ams"
 
 [build]

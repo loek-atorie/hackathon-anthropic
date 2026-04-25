@@ -1,6 +1,6 @@
 # P1 — Vapi-facing webhook router. No volume needed.
 # Set the app name with `fly launch --no-deploy` (or rename here before launch).
-app = "whale-p1"
+app = "whale-p1-diari"
 primary_region = "ams"
 
 [build]
