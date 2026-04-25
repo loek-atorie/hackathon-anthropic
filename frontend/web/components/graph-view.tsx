@@ -1,96 +1,39 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ForceGraph, NODE_COLORS, NODE_TYPE_LABELS } from "./force-graph";
 import { MarkdownDrawer } from "./markdown-drawer";
 import { useBus } from "@/lib/sse";
-import type { GraphData, GraphNode, GraphNodeType } from "@/lib/vault-reader";
+import type { GraphData, GraphNode, GraphNodeType, GraphEdge } from "@/lib/vault-reader";
 
 interface GraphViewProps {
   initialData: GraphData;
 }
 
-// The synthetic call we add when the bus emits `call_ended`. Mirrors the demo
-// fixture: call-0042 → ING + NL12RABO0123456789 + bank-helpdesk-v3.
-const DEMO_CALL_ID = "call-0042";
-const DEMO_CALL_NODE: GraphNode = {
-  id: DEMO_CALL_ID,
-  type: "call",
-  label: DEMO_CALL_ID,
-  path: `vault/calls/${DEMO_CALL_ID}.md`,
-  frontmatter: {
-    type: "call",
-    id: DEMO_CALL_ID,
-    started_at: "2026-04-25T13:00:00Z",
-    duration_s: 245,
-    scammer: "[[scammer-voice-A7]]",
-    claimed_bank: "[[ING]]",
-    script: "[[bank-helpdesk-v3]]",
-    extracted_ibans: ["[[NL12RABO0123456789]]"],
-    callback_number: "+31 20 555 0142",
-    tactics: ["urgency", "authority", "fear"],
-    language: "nl",
-  },
-  body: `# Call 0042 — live demo
-
-Net binnengekomen. \`[[scammer-voice-A7]]\` opnieuw, namens \`[[ING]]\`, met script \`[[bank-helpdesk-v3]]\` en bekend mule-IBAN \`[[NL12RABO0123456789]]\`.
-
-> "Mevrouw, dit is zeer urgent. Uw spaargeld loopt gevaar."
-
-Eerste keer dat we een terugbel-nummer (+31 20 555 0142) extraheren — handig voor cross-correlatie.
-`,
-};
-
-const DEMO_TARGET_IDS = ["ING", "NL12RABO0123456789", "bank-helpdesk-v3"];
-
 const HIGHLIGHT_DURATION_MS = 4500;
-
-function isCallEnded(e: { type: string }): boolean {
-  return e.type === "call_ended";
-}
+const CALL_ENDED_REFRESH_DELAY_MS = 3000;
 
 export function GraphView({ initialData }: GraphViewProps) {
-  // highlightFaded tracks whether the post-call_ended highlight has expired.
-  // It starts false; the timeout callback (not the effect body) sets it true,
-  // which satisfies react-hooks/set-state-in-effect.
-  const [highlightFaded, setHighlightFaded] = useState(false);
+  const router = useRouter();
+
+  const [dynamicNodes, setDynamicNodes] = useState<GraphNode[]>([]);
+  const [dynamicEdges, setDynamicEdges] = useState<GraphEdge[]>([]);
+  const [highlightIds, setHighlightIds] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callEndedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nodeEventsReceivedRef = useRef(false);
 
   const { events, reset: resetBus } = useBus();
 
-  // Derive whether a call_ended event has been seen. This drives node/edge
-  // insertion via useMemo below — no setState needed in an effect.
-  const callEndedSeen = useMemo(() => events.some(isCallEnded), [events]);
-
-  // Derive extra nodes and edges purely from callEndedSeen + initialData.
-  const extraNodes = useMemo<GraphNode[]>(() => {
-    if (!callEndedSeen) return [];
-    if (initialData.nodes.some((n) => n.id === DEMO_CALL_ID)) return [];
-    return [DEMO_CALL_NODE];
-  }, [callEndedSeen, initialData.nodes]);
-
-  const extraEdges = useMemo<GraphData["edges"]>(() => {
-    if (!callEndedSeen) return [];
-    if (initialData.nodes.some((n) => n.id === DEMO_CALL_ID)) return [];
-    return DEMO_TARGET_IDS.filter((target) =>
-      initialData.nodes.some((n) => n.id === target),
-    ).map((target) => ({ source: DEMO_CALL_ID, target, kind: "wikilink" as const }));
-  }, [callEndedSeen, initialData.nodes]);
-
-  // Highlight the new call node until the timer fires. highlightFaded is only
-  // ever set inside the setTimeout callback, not synchronously in the effect.
-  const highlightIds = useMemo(
-    () => (callEndedSeen && !highlightFaded ? new Set([DEMO_CALL_ID]) : new Set<string>()),
-    [callEndedSeen, highlightFaded],
-  );
-
   const data = useMemo<GraphData>(
     () => ({
-      nodes: [...initialData.nodes, ...extraNodes],
-      edges: [...initialData.edges, ...extraEdges],
+      nodes: [...initialData.nodes, ...dynamicNodes],
+      edges: [...initialData.edges, ...dynamicEdges],
     }),
-    [initialData, extraNodes, extraEdges],
+    [initialData, dynamicNodes, dynamicEdges],
   );
 
   const knownIds = useMemo(() => new Set(data.nodes.map((n) => n.id)), [data]);
@@ -103,28 +46,81 @@ export function GraphView({ initialData }: GraphViewProps) {
 
   const selectedNode = selectedId ? (nodeById.get(selectedId) ?? null) : null;
 
-  // Schedule the highlight-fade. setState only fires inside the timeout
-  // callback, satisfying react-hooks/set-state-in-effect.
+  // Handle graph_node_added: fetch the real node and merge into state.
   useEffect(() => {
-    if (!callEndedSeen) return;
-    if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
-    highlightTimeoutRef.current = setTimeout(
-      () => setHighlightFaded(true),
-      HIGHLIGHT_DURATION_MS,
-    );
+    const latest = events.at(-1);
+    if (!latest || latest.type !== "graph_node_added") return;
+
+    const { node_id, markdown_path } = latest;
+    nodeEventsReceivedRef.current = true;
+
+    const knownIdsParam = [...knownIds].join(",");
+    const url = `/api/vault-node?path=${encodeURIComponent(markdown_path)}&knownIds=${encodeURIComponent(knownIdsParam)}`;
+
+    fetch(url)
+      .then((r) => r.json())
+      .then(({ node, edges }: { node: GraphNode; edges: GraphEdge[] }) => {
+        setDynamicNodes((prev) => {
+          if (prev.some((n) => n.id === node.id)) return prev;
+          return [...prev, node];
+        });
+        setDynamicEdges((prev) => {
+          const existingKeys = new Set(prev.map((e) => [e.source, e.target].sort().join("|")));
+          const newEdges = edges.filter(
+            (e) => !existingKeys.has([e.source, e.target].sort().join("|")),
+          );
+          return [...prev, ...newEdges];
+        });
+
+        setHighlightIds(new Set([node_id]));
+        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+        highlightTimeoutRef.current = setTimeout(
+          () => setHighlightIds(new Set()),
+          HIGHLIGHT_DURATION_MS,
+        );
+      })
+      .catch((err) => console.warn("[graph-view] vault-node fetch failed:", err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
+  // Handle call_ended: start a 3-second timer; if no node events arrived, refresh.
+  useEffect(() => {
+    const latest = events.at(-1);
+    if (!latest || latest.type !== "call_ended") return;
+
+    nodeEventsReceivedRef.current = false;
+
+    if (callEndedTimerRef.current) clearTimeout(callEndedTimerRef.current);
+    callEndedTimerRef.current = setTimeout(() => {
+      if (!nodeEventsReceivedRef.current) {
+        router.refresh();
+      }
+    }, CALL_ENDED_REFRESH_DELAY_MS);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
+  // Cleanup timers on unmount.
+  useEffect(() => {
     return () => {
       if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+      if (callEndedTimerRef.current) clearTimeout(callEndedTimerRef.current);
     };
-  }, [callEndedSeen]);
+  }, []);
 
-  // Reset both the bus and the dynamic additions.
   const handleReset = useCallback(() => {
     if (highlightTimeoutRef.current) {
       clearTimeout(highlightTimeoutRef.current);
       highlightTimeoutRef.current = null;
     }
-    setHighlightFaded(false);
+    if (callEndedTimerRef.current) {
+      clearTimeout(callEndedTimerRef.current);
+      callEndedTimerRef.current = null;
+    }
+    setHighlightIds(new Set());
+    setDynamicNodes([]);
+    setDynamicEdges([]);
     setSelectedId(null);
+    nodeEventsReceivedRef.current = false;
     resetBus();
   }, [resetBus]);
 
@@ -141,7 +137,6 @@ export function GraphView({ initialData }: GraphViewProps) {
 
   const handleCloseDrawer = useCallback(() => setSelectedId(null), []);
 
-  // Counts per type (for the legend).
   const counts = useMemo(() => {
     const m: Record<GraphNodeType, number> = {
       call: 0,
@@ -156,7 +151,6 @@ export function GraphView({ initialData }: GraphViewProps) {
 
   return (
     <div className="relative flex h-full w-full flex-col">
-      {/* Compact header strip */}
       <header className="z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--background)]/70 px-6 py-4 backdrop-blur">
         <div className="flex flex-col gap-1">
           <span className="text-[11px] font-medium uppercase tracking-[0.18em] text-[var(--accent)]">
@@ -216,7 +210,6 @@ export function GraphView({ initialData }: GraphViewProps) {
         </div>
       </header>
 
-      {/* The graph fills the remaining space. */}
       <div className="relative flex-1">
         <ForceGraph
           data={data}
