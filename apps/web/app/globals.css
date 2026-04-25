@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+/*
+ * The Scammer's Mirror — design tokens.
+ * Single bright accent (amber/lime hybrid) on a near-black canvas.
+ * Force dark mode globally; no toggle.
+ */
+
+:root {
+  --background: #07080a;
+  --background-elev: #0f1115;
+  --background-card: #11141a;
+  --foreground: #e8eaed;
+  --muted: #9aa0a6;
+  --muted-2: #6b7280;
+  --border: #1f242c;
+  --border-strong: #2a313b;
+
+  /* Single bright accent — demo-friendly amber-lime. */
+  --accent: #d4ff3a;
+  --accent-soft: rgba(212, 255, 58, 0.14);
+  --accent-ink: #07080a;
+
+  /* Speaker colors for transcripts (Phase B will use these). */
+  --speaker-mevrouw: #7dd3fc;
+  --speaker-scammer: #f87171;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elev: var(--background-elev);
+  --color-background-card: var(--background-card);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle ambient gradient — keeps the background from feeling flat. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 500px at 12% -10%, rgba(212, 255, 58, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 110% 0%, rgba(125, 211, 252, 0.04), transparent 60%);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Thin custom scrollbars for the dashboard look. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
