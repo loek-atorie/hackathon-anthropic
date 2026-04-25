@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from streaming import sse_stream
-from vapi.outbound import router as demo_router
+from vapi.outbound import demo_router, internal_router
 from vapi.webhooks import router as vapi_router
 
 app = FastAPI(title="Scammer's Mirror API")
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(vapi_router)
 app.include_router(demo_router)
+app.include_router(internal_router)
 
 
 @app.get("/healthz")
