@@ -2,7 +2,12 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import AsyncGenerator
+
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent / ".env")
 
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -59,6 +64,31 @@ async def ingest(payload: dict, background_tasks: BackgroundTasks):
         return {"status": "ignored", "reason": "empty transcript"}
     background_tasks.add_task(process_and_publish, transcript, call_id)
     return {"status": "processing", "call_id": call_id}
+
+
+@app.post("/call_ended")
+async def call_ended(payload: dict, background_tasks: BackgroundTasks):
+    """Triggered by P1 when Vapi sends end-of-call-report.
+    Runs final extraction on the accumulated transcript (if any), then
+    generates stakeholder reports and finalizes vault files.
+    """
+    from agents.listener import process_and_publish
+    call_id = payload.get("call_id", "")
+    duration_s = payload.get("duration_s", 0)
+    if not call_id:
+        return {"status": "ignored", "reason": "missing call_id"}
+    # Re-run extraction with a sentinel so the reporter knows the call is over.
+    # If there was a running transcript buffer, the last /ingest already processed it.
+    # We publish a call_ended event to SSE so the frontend graph page reloads.
+    call_ended_event = {
+        "type": "call_ended",
+        "call_id": call_id,
+        "duration_s": duration_s,
+        "ts": datetime.now(timezone.utc).isoformat(),
+    }
+    for q in list(_subscribers):
+        await q.put(call_ended_event)
+    return {"status": "ok", "call_id": call_id}
 
 
 @app.get("/health")

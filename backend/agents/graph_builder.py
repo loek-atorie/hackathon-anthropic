@@ -21,7 +21,8 @@ from agents.models import Extraction
 
 log = logging.getLogger(__name__)
 
-VAULT_ROOT = Path(os.getenv("VAULT_PATH", "/home/pskpe/hackathon-anthropic/vault"))
+_DEFAULT_VAULT = Path(__file__).resolve().parents[2] / "vault"
+VAULT_ROOT = Path(os.getenv("VAULT_PATH", str(_DEFAULT_VAULT)))
 
 # Canonical org names for known Dutch targets — prevents ING vs "ING Bank" split files
 _ORG_CANONICAL: dict[str, str] = {
