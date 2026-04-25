@@ -58,6 +58,8 @@ async def vapi_webhook(request: Request) -> dict[str, Any]:
         }
         await bus.publish(event)
         await _forward_to_p2("/ingest", {"call_id": call_id, "text": message.get("transcript", "")})
+        # Mirror to P2's SSE so the frontend (which subscribes to P2's /events) sees live transcripts
+        await _forward_to_p2("/publish", event)
 
     elif msg_type == "function-call":
         # Mevrouw's nudge tool round-trips through here in Step 5.
