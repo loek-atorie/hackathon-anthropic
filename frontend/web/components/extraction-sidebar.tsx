@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExtractionField, ExtractionUpdate } from "@/lib/types";
+import { tacticStyle } from "@/lib/tactic-styles";
 
 interface ExtractionSidebarProps {
   events: ExtractionUpdate[];
@@ -131,14 +132,22 @@ function CardValue({ field, value }: { field: ExtractionField; value: FieldValue
       const list = Array.isArray(value) ? value : [String(value)];
       return (
         <div className="flex flex-wrap gap-1.5">
-          {list.map((t) => (
-            <span
-              key={t}
-              className="inline-flex items-center rounded-full border border-[var(--border-strong)] bg-[var(--background-elev)] px-2.5 py-0.5 text-xs text-[var(--foreground)]"
-            >
-              {t}
-            </span>
-          ))}
+          {list.map((t) => {
+            const style = tacticStyle(t);
+            return (
+              <span
+                key={t}
+                className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
+                style={{
+                  background: style.bg,
+                  color: style.text,
+                  border: `1px solid ${style.border}`,
+                }}
+              >
+                {t}
+              </span>
+            );
+          })}
         </div>
       );
     }

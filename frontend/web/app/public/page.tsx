@@ -1,6 +1,5 @@
-"use client";
-
 import { ScammerMinutesCounter } from "@/components/counter";
+import { tacticStyle } from "@/lib/tactic-styles";
 
 // ---------------------------------------------------------------------------
 // Hardcoded call summaries derived from the vault fixtures (calls 0032–0040).
@@ -60,38 +59,6 @@ const RECENT_CALLS: CallSummary[] = [
   },
 ];
 
-// Tactic pill colours — match the design system's dark palette.
-const TACTIC_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  urgency: {
-    bg: "rgba(251, 146, 60, 0.12)",
-    text: "#fb923c",
-    border: "rgba(251, 146, 60, 0.3)",
-  },
-  authority: {
-    bg: "rgba(125, 211, 252, 0.10)",
-    text: "#7dd3fc",
-    border: "rgba(125, 211, 252, 0.25)",
-  },
-  fear: {
-    bg: "rgba(248, 113, 113, 0.12)",
-    text: "#f87171",
-    border: "rgba(248, 113, 113, 0.3)",
-  },
-  technical: {
-    bg: "rgba(167, 139, 250, 0.12)",
-    text: "#a78bfa",
-    border: "rgba(167, 139, 250, 0.3)",
-  },
-};
-
-function defaultTacticStyle() {
-  return {
-    bg: "var(--background-elev)",
-    text: "var(--muted)",
-    border: "var(--border-strong)",
-  };
-}
-
 function CallCard({ call }: { call: CallSummary }) {
   return (
     <div
@@ -132,7 +99,7 @@ function CallCard({ call }: { call: CallSummary }) {
       {/* Tactic pills */}
       <div className="flex flex-wrap gap-1.5">
         {call.tactics.map((t) => {
-          const style = TACTIC_COLORS[t] ?? defaultTacticStyle();
+          const style = tacticStyle(t);
           return (
             <span
               key={t}

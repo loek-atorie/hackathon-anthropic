@@ -21,12 +21,12 @@ function toChars(n: number): string[] {
   return formatDutch(n).split("");
 }
 
-interface AnimatedDigitProps {
+interface AnimatedCharProps {
   char: string;
   index: number;
 }
 
-function AnimatedChar({ char, index }: AnimatedDigitProps) {
+function AnimatedChar({ char, index }: AnimatedCharProps) {
   const isDigit = /\d/.test(char);
 
   if (!isDigit) {
@@ -96,6 +96,10 @@ export function ScammerMinutesCounter() {
         aria-live="polite"
         aria-label={`${count} scammer minutes wasted today`}
       >
+        {/* key={i} (index) is intentional: the character count stays fixed for
+            the demo range (4087 → ~4300 max), so position identity is stable.
+            A digit-count boundary (e.g. 9999 → 10000) would add a position and
+            cause all digits to animate simultaneously — not a concern here. */}
         {chars.map((char, i) => (
           <AnimatedChar key={i} char={char} index={i} />
         ))}
