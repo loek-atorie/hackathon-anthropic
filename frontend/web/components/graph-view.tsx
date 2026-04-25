@@ -25,6 +25,7 @@ export function GraphView({ initialData }: GraphViewProps) {
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callEndedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nodeEventsReceivedRef = useRef(false);
+  const lastProcessedIndexRef = useRef(-1);
 
   const { events, reset: resetBus } = useBus();
 
@@ -46,58 +47,56 @@ export function GraphView({ initialData }: GraphViewProps) {
 
   const selectedNode = selectedId ? (nodeById.get(selectedId) ?? null) : null;
 
-  // Handle graph_node_added: fetch the real node and merge into state.
+  // Handle all events in order, walking forward from the last-processed index.
   useEffect(() => {
-    const latest = events.at(-1);
-    if (!latest || latest.type !== "graph_node_added") return;
+    for (let i = lastProcessedIndexRef.current + 1; i < events.length; i++) {
+      const event = events[i];
 
-    const { node_id, markdown_path } = latest;
-    nodeEventsReceivedRef.current = true;
+      if (event.type === "graph_node_added") {
+        const { node_id, markdown_path } = event;
+        nodeEventsReceivedRef.current = true;
 
-    const knownIdsParam = [...knownIds].join(",");
-    const url = `/api/vault-node?path=${encodeURIComponent(markdown_path)}&knownIds=${encodeURIComponent(knownIdsParam)}`;
+        const knownIdsParam = [...knownIds].join(",");
+        const url = `/api/vault-node?path=${encodeURIComponent(markdown_path)}&knownIds=${encodeURIComponent(knownIdsParam)}`;
 
-    fetch(url)
-      .then((r) => r.json())
-      .then(({ node, edges }: { node: GraphNode; edges: GraphEdge[] }) => {
-        setDynamicNodes((prev) => {
-          if (prev.some((n) => n.id === node.id)) return prev;
-          return [...prev, node];
-        });
-        setDynamicEdges((prev) => {
-          const existingKeys = new Set(prev.map((e) => [e.source, e.target].sort().join("|")));
-          const newEdges = edges.filter(
-            (e) => !existingKeys.has([e.source, e.target].sort().join("|")),
-          );
-          return [...prev, ...newEdges];
-        });
+        fetch(url)
+          .then((r) => r.json())
+          .then(({ node, edges }: { node: GraphNode; edges: GraphEdge[] }) => {
+            setDynamicNodes((prev) => {
+              if (prev.some((n) => n.id === node.id)) return prev;
+              return [...prev, node];
+            });
+            setDynamicEdges((prev) => {
+              const existingKeys = new Set(prev.map((e) => [e.source, e.target].sort().join("|")));
+              const newEdges = edges.filter(
+                (e) => !existingKeys.has([e.source, e.target].sort().join("|")),
+              );
+              return [...prev, ...newEdges];
+            });
 
-        setHighlightIds(new Set([node_id]));
-        if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
-        highlightTimeoutRef.current = setTimeout(
-          () => setHighlightIds(new Set()),
-          HIGHLIGHT_DURATION_MS,
-        );
-      })
-      .catch((err) => console.warn("[graph-view] vault-node fetch failed:", err));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events]);
-
-  // Handle call_ended: start a 3-second timer; if no node events arrived, refresh.
-  useEffect(() => {
-    const latest = events.at(-1);
-    if (!latest || latest.type !== "call_ended") return;
-
-    nodeEventsReceivedRef.current = false;
-
-    if (callEndedTimerRef.current) clearTimeout(callEndedTimerRef.current);
-    callEndedTimerRef.current = setTimeout(() => {
-      if (!nodeEventsReceivedRef.current) {
-        router.refresh();
+            setHighlightIds(new Set([node_id]));
+            if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
+            highlightTimeoutRef.current = setTimeout(
+              () => setHighlightIds(new Set()),
+              HIGHLIGHT_DURATION_MS,
+            );
+          })
+          .catch((err) => console.warn("[graph-view] vault-node fetch failed:", err));
       }
-    }, CALL_ENDED_REFRESH_DELAY_MS);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events]);
+
+      if (event.type === "call_ended") {
+        nodeEventsReceivedRef.current = false;
+
+        if (callEndedTimerRef.current) clearTimeout(callEndedTimerRef.current);
+        callEndedTimerRef.current = setTimeout(() => {
+          if (!nodeEventsReceivedRef.current) {
+            router.refresh();
+          }
+        }, CALL_ENDED_REFRESH_DELAY_MS);
+      }
+    }
+    lastProcessedIndexRef.current = events.length - 1;
+  }, [events, knownIds, router]);
 
   // Cleanup timers on unmount.
   useEffect(() => {
@@ -121,6 +120,7 @@ export function GraphView({ initialData }: GraphViewProps) {
     setDynamicEdges([]);
     setSelectedId(null);
     nodeEventsReceivedRef.current = false;
+    lastProcessedIndexRef.current = -1;
     resetBus();
   }, [resetBus]);
 
