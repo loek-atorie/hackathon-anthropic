@@ -28,6 +28,9 @@ app.add_middleware(
 # In-memory event queue — all tracks publish here, SSE consumers read from it
 _subscribers: list[asyncio.Queue] = []
 
+# Per-call transcript accumulator — keyed by call_id, value is ordered list of chunks
+_transcripts: dict[str, list[str]] = {}
+
 
 async def _event_generator(queue: asyncio.Queue) -> AsyncGenerator:
     try:
@@ -55,40 +58,45 @@ async def publish(event: dict):
 
 
 @app.post("/ingest")
-async def ingest(payload: dict, background_tasks: BackgroundTasks):
-    """Receive a transcript → run Claude extraction → publish to SSE + vault + interrogator."""
-    from agents.listener import process_and_publish
+async def ingest(payload: dict):
+    """Accumulate transcript chunks per call. Extraction runs at call_ended, not per chunk."""
     transcript = payload.get("text", "")
     call_id = payload.get("call_id", f"call-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}")
     if not transcript.strip():
         return {"status": "ignored", "reason": "empty transcript"}
-    background_tasks.add_task(process_and_publish, transcript, call_id)
-    return {"status": "processing", "call_id": call_id}
+    _transcripts.setdefault(call_id, []).append(transcript)
+    return {"status": "buffered", "call_id": call_id, "chunks": len(_transcripts[call_id])}
 
 
 @app.post("/call_ended")
 async def call_ended(payload: dict, background_tasks: BackgroundTasks):
     """Triggered by P1 when Vapi sends end-of-call-report.
-    Runs final extraction on the accumulated transcript (if any), then
-    generates stakeholder reports and finalizes vault files.
+    Joins the accumulated transcript buffer and runs final extraction → vault + reports.
     """
     from agents.listener import process_and_publish
     call_id = payload.get("call_id", "")
     duration_s = payload.get("duration_s", 0)
     if not call_id:
         return {"status": "ignored", "reason": "missing call_id"}
-    # Re-run extraction with a sentinel so the reporter knows the call is over.
-    # If there was a running transcript buffer, the last /ingest already processed it.
-    # We publish a call_ended event to SSE so the frontend graph page reloads.
+
+    chunks = _transcripts.pop(call_id, [])
+    full_transcript = "\n".join(chunks)
+
+    if full_transcript.strip():
+        background_tasks.add_task(process_and_publish, full_transcript, call_id)
+        log.info("call_ended: running extraction on %d chunks for %s", len(chunks), call_id)
+    else:
+        log.warning("call_ended: no transcript buffered for %s — skipping extraction", call_id)
+
     call_ended_event = {
         "type": "call_ended",
         "call_id": call_id,
         "duration_s": duration_s,
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "t_offset_ms": int(datetime.now(timezone.utc).timestamp() * 1000),
     }
     for q in list(_subscribers):
         await q.put(call_ended_event)
-    return {"status": "ok", "call_id": call_id}
+    return {"status": "ok", "call_id": call_id, "chunks": len(chunks)}
 
 
 @app.get("/health")

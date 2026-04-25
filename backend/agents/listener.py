@@ -22,7 +22,7 @@ import httpx
 from agents import graph_builder, interrogator, reporter, voiceprint
 from agents.models import Extraction
 
-PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8000/publish")
+PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8080/publish")
 
 _client = anthropic.AsyncAnthropic()
 
@@ -184,7 +184,8 @@ async def process_and_publish(transcript: str, call_id: str) -> Extraction:
             async with httpx.AsyncClient() as http:
                 for file_path in files:
                     p = file_path if hasattr(file_path, "parts") else __import__("pathlib").Path(file_path)
-                    node_type = p.parent.name   # e.g. "calls", "ibans", "scripts"
+                    _folder_to_type = {"calls": "call", "ibans": "iban", "scripts": "script", "organisations": "bank"}
+                    node_type = _folder_to_type.get(p.parent.name, p.parent.name)
                     node_id = p.stem            # e.g. "call-0042", "NL91ABNA..."
                     node_event = {
                         "type": "graph_node_added",

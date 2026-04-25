@@ -238,7 +238,8 @@ def build(call_id: str, extraction: Extraction) -> list[Path]:
     # Call file — always a new file, no upsert needed
     call_path = VAULT_ROOT / "calls" / f"{_safe(call_id)}.md"
     if call_path.exists():
-        raise ValueError(f"call_id {call_id!r} already exists in vault — Vapi IDs must be unique")
+        log.warning("call_id %r already in vault — skipping duplicate", call_id)
+        return written
     _atomic_write(call_path, _call_content(call_id, extraction))
     log.info("wrote call file: %s", call_path)
     written.append(call_path)
