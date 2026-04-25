@@ -43,6 +43,11 @@ export default function LivePage() {
   const endedAtSeconds = callEnded?.duration_s ?? null;
 
   const isRealMode = Boolean(process.env.NEXT_PUBLIC_SSE_URL);
+  // Production runs inbound-only — anyone wanting to engage Mevrouw must call
+  // the Vapi number directly. The Start Demo button is dev-only; gate it
+  // behind an explicit opt-in so it never appears on the public dashboard.
+  const showDemoTrigger =
+    isRealMode && process.env.NEXT_PUBLIC_ENABLE_DEMO_TRIGGER === "true";
 
   async function handleStartDemo() {
     setTriggering(true);
@@ -77,8 +82,8 @@ export default function LivePage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Show Start Demo button only when connected to real SSE */}
-          {isRealMode && (
+          {/* Dev-only: shown when NEXT_PUBLIC_ENABLE_DEMO_TRIGGER=true. Off in prod. */}
+          {showDemoTrigger && (
             <div className="flex flex-col items-end gap-1">
               <button
                 type="button"

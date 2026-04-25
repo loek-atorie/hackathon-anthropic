@@ -25,6 +25,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from vault_api import router as vault_router  # noqa: E402
+
+app.include_router(vault_router)
+
 # In-memory event queue — all tracks publish here, SSE consumers read from it
 _subscribers: list[asyncio.Queue] = []
 

@@ -1,0 +1,32 @@
+# P2 — agent processing + vault writes + dashboard SSE source.
+# Set the app name with `fly launch --no-deploy` (or rename here before launch).
+app = "whale-p2"
+primary_region = "ams"
+
+[build]
+
+[env]
+  VAULT_PATH = "/data/vault"
+  PORT = "8080"
+
+[[mounts]]
+  source = "vault_data"
+  destination = "/data/vault"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "get"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
