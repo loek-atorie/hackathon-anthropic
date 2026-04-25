@@ -8,12 +8,19 @@ Reson8 MCP is the intended upstream; Claude is the fallback (plan risk note).
 """
 import asyncio
 import json
+import logging
 import os
-from typing import Optional
+import sys
+from functools import partial
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+log = logging.getLogger(__name__)
 
 import anthropic
 import httpx
-from pydantic import BaseModel
+from agents import graph_builder, interrogator, reporter
+from agents.models import Extraction
 
 PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8000/publish")
 
@@ -124,19 +131,6 @@ _SYSTEM_PROMPT = (
 )
 
 
-class Extraction(BaseModel):
-    language: Optional[str] = None
-    claimed_organisation: Optional[str] = None
-    iban: Optional[str] = None
-    iban_direction: Optional[str] = None
-    payment_method: Optional[str] = None
-    callback_number: Optional[str] = None
-    tactics: list[str] = []
-    urgency_score: int = 0
-    is_scam: bool = False
-    is_scam_confidence: float = 0.0
-    script_signature: Optional[str] = None
-
 
 MIN_TRANSCRIPT_WORDS = 8
 
@@ -165,14 +159,53 @@ async def extract(transcript: str) -> Extraction:
 
 
 async def process_and_publish(transcript: str, call_id: str) -> Extraction:
-    """Extract entities and broadcast to SSE bus. Returns the Extraction."""
+    """Extract entities, broadcast to SSE bus, write vault files. Returns the Extraction."""
     extraction = await extract(transcript)
+
+    # Publish extraction to SSE bus so P3's dashboard updates immediately
     payload = {"type": "extraction", "call_id": call_id, **extraction.model_dump()}
     async with httpx.AsyncClient() as http:
         try:
             await http.post(PUBLISH_URL, json=payload, timeout=5.0)
-        except httpx.ConnectError:
+        except httpx.RequestError:
             pass  # server not running in standalone test mode
+
+    # Write vault files only for confirmed scams (confidence >= 0.7)
+    # Run in thread pool — file I/O must not block the async event loop
+    if extraction.is_scam and extraction.is_scam_confidence >= 0.7:
+        loop = asyncio.get_running_loop()
+        try:
+            files = await loop.run_in_executor(
+                None, partial(graph_builder.build, call_id, extraction)
+            )
+            log.info("vault: %d files written for %s", len(files), call_id)
+
+            # Notify SSE consumers that the graph has new nodes
+            graph_payload = {
+                "type": "graph_update",
+                "call_id": call_id,
+                "files_written": [str(f) for f in files],
+            }
+            async with httpx.AsyncClient() as http:
+                try:
+                    await http.post(PUBLISH_URL, json=graph_payload, timeout=5.0)
+                except httpx.ConnectError:
+                    pass
+        except Exception as exc:
+            log.error("vault write failed for %s: %s", call_id, exc)
+
+    # Fire interrogator — suggest next question for Mevrouw Jansen
+    try:
+        await interrogator.interrogate(call_id, extraction)
+    except Exception as exc:
+        log.error("interrogator failed for %s: %s", call_id, exc)
+
+    # Generate stakeholder reports
+    try:
+        await reporter.generate_reports(call_id, extraction)
+    except Exception as exc:
+        log.error("reporter failed for %s: %s", call_id, exc)
+
     return extraction
 
 
