@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TopNav } from "@/components/top-nav";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,6 +34,17 @@ export default function RootLayout({
       <body className="relative min-h-full flex flex-col">
         <TopNav />
         <main className="relative z-10 flex flex-1 flex-col">{children}</main>
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          toastOptions={{
+            style: {
+              background: "var(--background-card)",
+              border: "1px solid var(--border-strong)",
+              color: "var(--foreground)",
+            },
+          }}
+        />
       </body>
     </html>
   );
