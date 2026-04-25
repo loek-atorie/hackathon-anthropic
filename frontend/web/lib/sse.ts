@@ -11,6 +11,8 @@ export interface UseBusResult {
   events: BusEvent[];
   latest: BusEvent | null;
   reset: () => void;
+  /** Bumps each time `reset()` is called. Lets consumers re-anchor wall-clock state. */
+  sessionKey: number;
 }
 
 export function useBus(): UseBusResult {
@@ -31,5 +33,5 @@ export function useBus(): UseBusResult {
 
   const latest = events.at(-1) ?? null;
 
-  return { events, latest, reset };
+  return { events, latest, reset, sessionKey: version };
 }
