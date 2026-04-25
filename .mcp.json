@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vapi": {
+      "type": "http",
+      "url": "https://mcp.vapi.ai/mcp",
+      "headers": {
+        "Authorization": "Bearer ${VAPI_API_KEY}"
+      }
+    }
+  }
+}
