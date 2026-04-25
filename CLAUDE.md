@@ -1,106 +1,103 @@
-# Claude Code Instructions — Scammer's Mirror
+# CLAUDE.md
 
-## Workflow rules
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Run all commands yourself — do not ask the user to run them
-- Only pause to ask the user for confirmation before: deleting files, pushing to git, or making changes that affect teammates (P1, P3)
-- One step at a time — complete each step fully before moving to the next
-- After every step:
-  1. Run the code and show the output
-  2. Review for bugs, edge cases, and best practices
-  3. Fix any issues found before moving on
-  4. Write or update tests to cover the new code and edge cases
-  5. Show what was done, what the output means, and what's next
+## Project Overview
 
-## Project layout
+**The Scammer's Mirror** — an AI honeypot system that catches phone scammers. A Claude-powered voice (Mevrouw Jansen) answers scam calls, extracts intelligence in real-time, and structures findings as Obsidian markdown for distribution to banks, telcos, and police via an open knowledge graph.
 
-```
-hackathon-anthropic/
-├── backend/                  ← Python / FastAPI (this is P2's track)
-│   ├── main.py               ← FastAPI app, SSE bus (/events, /publish)
-│   ├── agents/
-│   │   ├── models.py         ← shared Extraction model
-│   │   ├── listener.py       ← Claude extraction agent
-│   │   └── graph_builder.py  ← Obsidian vault writer
-│   ├── tests/                ← test scripts
-│   └── .env                  ← ANTHROPIC_API_KEY (never commit)
-└── vault/                    ← Obsidian markdown files
-    ├── calls/
-    ├── ibans/
-    ├── organisations/
-    └── scripts/
-```
+## Development Commands
 
-## Always run commands from
+All frontend commands run from `frontend/web/`:
 
 ```bash
-cd /home/pskpe/hackathon-anthropic/backend
+cd frontend/web
+pnpm install       # install dependencies
+pnpm dev           # start dev server (http://localhost:3000)
+pnpm build         # production build
+pnpm lint          # ESLint 9 + Next.js rules
 ```
 
-## Python environment
+Alternatively, `scripts/start-web.sh` runs the dev server on PORT=6001.
 
-```bash
-# Load env vars
-set -a && source .env && set +a
+There are no tests configured (hackathon MVP).
 
-# Run Python
-.venv/bin/python <script>
+## Architecture Overview
 
-# Install packages
-.venv/bin/pip install <package>
-```
+The project is conceptually split into three parallel tracks:
 
-## Running tests
+- **P1** — Voice + adversary: Vapi phone integration, Mevrouw Jansen voice clone (ElevenLabs), outbound Scammer Agent
+- **P2** — Intelligence pipeline: FastAPI + SSE bus, Reson8 MCP entity extraction, Claude agents, vault writer
+- **P3** — Frontend (`frontend/web/`): Next.js 16 App Router, all pages, mock-first architecture
 
-```bash
-cd /home/pskpe/hackathon-anthropic/backend && set -a && source .env && set +a && .venv/bin/python tests/test_cases.py
-cd /home/pskpe/hackathon-anthropic/backend && set -a && source .env && set +a && .venv/bin/python tests/test_graph_builder.py
-```
+This repo contains **P3 only**. The backend (P2) is a separate FastAPI service.
 
-## Running the server
+## Frontend Architecture (`frontend/web/`)
 
-```bash
-cd /home/pskpe/hackathon-anthropic/backend && set -a && source .env && set +a && .venv/bin/uvicorn main:app --reload --port 8000
-```
+### Routes
+- `/` — Landing page with demo stats
+- `/live` — Real-time transcript stream + extraction sidebar during a call
+- `/graph` — Force-directed knowledge graph from vault markdown
+- `/reports` — Stakeholder report tabs (Politie / Bank / Telco / Public)
+- `/public` — Animated "scammer minutes wasted today" counter
 
-## What's built (P2 track status)
+### Data Flow
 
-| Component | Status |
-|---|---|
-| FastAPI skeleton + SSE bus (`/events`, `/publish`) | ✅ Done |
-| Listener — Claude extraction from NL transcript | ✅ Done |
-| Graph Builder — writes Obsidian vault markdown | ✅ Done |
-| Wired: listener → graph builder → SSE | ✅ Done |
-| Interrogator agent | ⬜ Next |
-| Reporter — 4 stakeholder reports | ⬜ |
-| Voiceprint placeholder | ⬜ |
-| Integration with P1 (Vapi transcript stream) | ⬜ |
+**Event streaming:** `useBus()` hook (`lib/sse.ts`) subscribes to an SSE endpoint. In development, `lib/mock-bus.ts` replays fixture events on a timeline. Swapping real SSE in requires no component changes — drop in the real endpoint URL.
 
-## Extraction schema (current)
+**Vault as database:** `lib/vault-reader.ts` (server-only) walks `vault/*.md` files, parses YAML frontmatter with `gray-matter`, and builds graph node/edge data at server render time. No SQL/NoSQL — plain markdown.
 
-Fields emitted by `agents/listener.py`:
-- `language` — nl / en / tr / ar / other
-- `claimed_organisation` — impersonated org (bank, police, PostNL, etc.)
-- `iban` + `iban_direction` — IBAN and whether victim sends TO it or gives it
-- `payment_method` — iban / gift_card / crypto / western_union / foreign_account
-- `callback_number`
-- `tactics[]` — urgency / authority / fear / isolation / pretexting / social_proof / scarcity / reciprocity
-- `urgency_score` — 0–10
-- `is_scam` + `is_scam_confidence` — explicit verdict + confidence
-- `script_signature` — enum: bank-helpdesk / overheid-boete / pakket-fraude / microsoft-support / investering-fraude / belasting-teruggave / romance-fraude / opa-oma-fraude / loterij-fraude / voorschot-fraude / other / none
+**`lib/types.ts`** is the frontend-backend contract. It defines:
+- `BusEvent` union: `TranscriptDelta | ExtractionUpdate | CallEnded | GraphNodeAdded`
+- `VaultEntity` unions: `Call | Scammer | IBAN | Bank | Script` (with frontmatter shapes)
 
-## Key decisions made
+Any backend integration must emit `BusEvent` JSON matching these types.
 
-- Reson8 MCP not integrated — using Claude directly (tested, reliable, identical output)
-- Graph Builder only writes vault files when `is_scam: true` AND `confidence >= 0.7`
-- Vault writes are atomic (temp file + os.replace) and file-locked (fcntl) for concurrency safety
-- `Extraction` model lives in `agents/models.py` to avoid circular imports
-- Minimum 8 words in transcript before calling Claude (skip short/wrong-number calls)
-- `script_signature` is a fixed enum — Claude cannot invent new categories
+### Key Files
 
-## SSE events emitted
+| File | Purpose |
+|------|---------|
+| `lib/types.ts` | Frontend-backend contract types |
+| `lib/mock-bus.ts` | Fixture event replayer (dev stand-in for SSE) |
+| `lib/vault-reader.ts` | Server-only markdown→graph builder |
+| `components/force-graph.tsx` | react-force-graph-2d wrapper + color logic |
+| `components/extraction-sidebar.tsx` | Live extraction display |
+| `components/transcript-stream.tsx` | Dialogue display with speaker colors |
+| `app/globals.css` | Design tokens, dark theme, custom `--accent` color |
+| `fixtures/*.json` | Transcript + extraction fixture data for demo |
 
-| Event type | When |
-|---|---|
-| `extraction` | After every Claude extraction |
-| `graph_update` | After vault files are written (scam confirmed only) |
+### Design System
+
+- Tailwind CSS v4 + shadcn/ui components
+- Custom dark theme with lime-amber hybrid accent (`--accent` in `globals.css`)
+- `app/globals.css` is the single source of truth for all custom CSS variables
+
+## Knowledge Graph (Vault)
+
+`vault/` is the live knowledge graph — a flat folder of Obsidian-style markdown files:
+
+- `vault/calls/` — Call records (10 pre-seeded: call-0031 through call-0040)
+- `vault/scammers/`, `vault/ibans/`, `vault/banks/`, `vault/scripts/` — Entity folders
+- `vault/_reports/` — 40 pre-seeded stakeholder reports (4 types × 10 calls)
+
+Each file has YAML frontmatter + body. Edges in the knowledge graph are inferred from `[[wikilinks]]`. The graph is git-versioned and EU-sovereign by design.
+
+## Backend Integration Points
+
+The frontend is ready to connect to P2's backend. Required:
+
+1. **SSE stream** at `/api/events` emitting `BusEvent` JSON
+2. **Vault writes** — backend writes markdown to `vault/` after each call
+3. **Report endpoint** — `app/api/reports/[callId]/route.ts` is a stub awaiting implementation
+4. **Demo trigger** — POST to `/demo/trigger` starts an outbound Scammer Agent call
+
+## Tech Stack
+
+- **Next.js 16** (App Router, React 19, Turbopack)
+- **TypeScript 5** (strict mode, path alias `@/*`)
+- **Tailwind CSS v4** + shadcn/ui + Base UI
+- **gray-matter** — YAML frontmatter parsing
+- **react-force-graph-2d** — knowledge graph visualization
+- **framer-motion** — animations
+- **sonner** — toast notifications
+- **react-markdown + remark-gfm** — stakeholder report rendering

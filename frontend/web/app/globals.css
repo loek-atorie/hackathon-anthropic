@@ -1,0 +1,352 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * The Scammer's Mirror — design tokens.
+ * Single bright accent (amber/lime hybrid) on a near-black canvas.
+ * Force dark mode globally; no toggle.
+ */
+
+:root {
+  --background: #07080a;
+  --background-elev: #0f1115;
+  --background-card: #11141a;
+  --foreground: #e8eaed;
+  --muted: #9aa0a6;
+  --muted-2: #6b7280;
+  --border: #1f242c;
+  --border-strong: #2a313b;
+
+  /* Single bright accent — demo-friendly amber-lime. */
+  --accent: #d4ff3a;
+  --accent-soft: rgba(212, 255, 58, 0.14);
+  --accent-ink: #07080a;
+
+  /* Speaker colors for transcripts (Phase B will use these). */
+  --speaker-mevrouw: #7dd3fc;
+  --speaker-scammer: #f87171;
+
+  /* shadcn semantic tokens — mapped to our palette */
+  --card: #11141a;
+  --card-foreground: #e8eaed;
+  --popover: #11141a;
+  --popover-foreground: #e8eaed;
+  --primary: #d4ff3a;
+  --primary-foreground: #07080a;
+  --secondary: #1f242c;
+  --secondary-foreground: #e8eaed;
+  --muted-foreground: #9aa0a6;
+  --accent-foreground: #07080a;
+  --destructive: oklch(0.704 0.191 22.216);
+  --input: #1f242c;
+  --ring: #d4ff3a;
+  --radius: 0.5rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elev: var(--background-elev);
+  --color-background-card: var(--background-card);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-ink: var(--accent-ink);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* shadcn @theme mappings */
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle ambient gradient — keeps the background from feeling flat. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 500px at 12% -10%, rgba(212, 255, 58, 0.06), transparent 60%),
+    radial-gradient(900px 600px at 110% 0%, rgba(125, 211, 252, 0.04), transparent 60%);
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Thin custom scrollbars for the dashboard look. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Prose styling for the markdown drawer body (dark mode). */
+.prose-scammer {
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.prose-scammer h1 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  color: var(--foreground);
+  letter-spacing: -0.01em;
+}
+.prose-scammer h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: var(--foreground);
+}
+.prose-scammer h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin: 16px 0 6px;
+  color: var(--muted);
+}
+.prose-scammer p {
+  margin: 0 0 12px;
+  color: var(--foreground);
+}
+.prose-scammer ul,
+.prose-scammer ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.prose-scammer ul {
+  list-style: disc;
+}
+.prose-scammer ol {
+  list-style: decimal;
+}
+.prose-scammer li {
+  margin: 4px 0;
+}
+.prose-scammer blockquote {
+  border-left: 2px solid var(--accent);
+  padding: 4px 12px;
+  margin: 12px 0;
+  color: var(--muted);
+  background: var(--accent-soft);
+  border-radius: 0 6px 6px 0;
+}
+.prose-scammer code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  padding: 1px 5px;
+  background: var(--background-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.prose-scammer pre {
+  background: var(--background-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+}
+.prose-scammer pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+.prose-scammer a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.prose-scammer table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+.prose-scammer th,
+.prose-scammer td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.prose-scammer th {
+  background: var(--background-card);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Extended prose for report tabs — larger body text, more breathing room. */
+.prose-report {
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.8;
+}
+.prose-report h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0 0 20px;
+  color: var(--foreground);
+  letter-spacing: -0.02em;
+  border-bottom: 1px solid var(--border-strong);
+  padding-bottom: 12px;
+}
+.prose-report h2 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 28px 0 10px;
+  color: var(--foreground);
+}
+.prose-report h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  margin: 22px 0 8px;
+  color: var(--muted);
+}
+.prose-report p {
+  margin: 0 0 16px;
+  color: var(--foreground);
+}
+.prose-report ul,
+.prose-report ol {
+  margin: 0 0 16px;
+  padding-left: 24px;
+}
+.prose-report ul {
+  list-style: disc;
+}
+.prose-report ol {
+  list-style: decimal;
+}
+.prose-report li {
+  margin: 6px 0;
+  color: var(--foreground);
+}
+.prose-report strong {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.prose-report blockquote {
+  border-left: 2px solid var(--accent);
+  padding: 6px 16px;
+  margin: 16px 0;
+  color: var(--muted);
+  background: var(--accent-soft);
+  border-radius: 0 6px 6px 0;
+}
+.prose-report code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 13.5px;
+  padding: 2px 6px;
+  background: var(--background-card);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--accent);
+}
+.prose-report pre {
+  background: var(--background-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: 0 0 16px;
+  font-size: 13.5px;
+}
+.prose-report pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--foreground);
+}
+.prose-report a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose-report table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px;
+  font-size: 14px;
+}
+.prose-report th,
+.prose-report td {
+  border: 1px solid var(--border);
+  padding: 8px 12px;
+  text-align: left;
+}
+.prose-report th {
+  background: var(--background-card);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.prose-report hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 24px 0;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
