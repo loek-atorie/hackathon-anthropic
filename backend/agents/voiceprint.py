@@ -77,12 +77,13 @@ def _upsert_scammer(voice_id: str, call_id: str, extraction: Extraction) -> Path
         path.parent.mkdir(parents=True, exist_ok=True)
         content = f"""---
 type: scammer
-voice_id: {voice_id}
+cluster_id: {voice_id}
 mock: true
 first_seen: {_now()}
 seen_in_calls: ["[[{call_id}]]"]
 script_signature: "{extraction.script_signature or 'unknown'}"
 claimed_organisation: "{extraction.claimed_organisation or 'unknown'}"
+notes: "Hash-based mock cluster — not real voice biometrics"
 ---
 
 # Scammer Cluster {voice_id}
