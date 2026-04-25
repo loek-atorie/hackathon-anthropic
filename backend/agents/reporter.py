@@ -23,7 +23,8 @@ log = logging.getLogger(__name__)
 _client = anthropic.AsyncAnthropic()
 
 PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8000/publish")
-VAULT_ROOT = Path(os.getenv("VAULT_PATH", "/home/pskpe/hackathon-anthropic/vault"))
+_DEFAULT_VAULT = Path(__file__).resolve().parents[2] / "vault"
+VAULT_ROOT = Path(os.getenv("VAULT_PATH", str(_DEFAULT_VAULT)))
 
 # ── Report definitions ────────────────────────────────────────────────────────
 
@@ -138,10 +139,10 @@ async def _generate_one(report_def: dict, extraction: Extraction) -> str:
 
 
 def _write_report(call_id: str, report_id: str, content: str) -> Path:
-    """Write report to vault/reports/{call_id}/{report_id}.md (sync — call via executor)."""
-    report_dir = VAULT_ROOT / "reports" / call_id
+    """Write report to vault/_reports/{call_id}-{report_id}.md (sync — call via executor)."""
+    report_dir = VAULT_ROOT / "_reports"
     report_dir.mkdir(parents=True, exist_ok=True)
-    path = report_dir / f"{report_id}.md"
+    path = report_dir / f"{call_id}-{report_id}.md"
     path.write_text(content, encoding="utf-8")
     return path
 
