@@ -1,11 +1,17 @@
 "use client";
 
-// React hook wrapping the bus. Today it points at mock-bus; tomorrow we swap
-// the import for a real EventSource adapter — public API stays the same.
+// React hook wrapping the bus. When NEXT_PUBLIC_SSE_URL is set at build time,
+// uses the real EventSource adapter (real-bus.ts). Otherwise falls back to
+// mock-bus fixture replay — safe for dev and demo without a running backend.
 
 import { useCallback, useEffect, useState } from "react";
 import type { BusEvent } from "./types";
-import { subscribe } from "./mock-bus";
+import { subscribe as mockSubscribe } from "./mock-bus";
+import { subscribe as realSubscribe } from "./real-bus";
+
+// NEXT_PUBLIC_ vars are inlined by Next.js at build time, so this branch is
+// resolved statically — only one subscribe implementation is bundled per build.
+const subscribe = process.env.NEXT_PUBLIC_SSE_URL ? realSubscribe : mockSubscribe;
 
 export interface UseBusResult {
   events: BusEvent[];
