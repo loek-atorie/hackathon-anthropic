@@ -8,6 +8,10 @@ primary_region = "ams"
 [env]
   VAULT_PATH = "/data/vault"
   PORT = "8080"
+  # Listener and other agents POST to this URL to fan events out to SSE
+  # subscribers. Default in code is :8000 which doesn't match the app port,
+  # so the per-field extraction_update events would silently 0-publish.
+  PUBLISH_URL = "http://localhost:8080/publish"
 
 [[mounts]]
   source = "vault_data"
