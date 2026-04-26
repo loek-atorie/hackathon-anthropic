@@ -11,17 +11,17 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 });
 
 export const NODE_COLORS: Record<GraphNodeType, string> = {
-  call: "#d4ff3a", // accent lime — the action
-  scammer: "#f87171", // red
-  iban: "#7dd3fc", // sky blue
-  bank: "#fb923c", // orange
-  script: "#c084fc", // purple
+  call: "#d4ff3a",    // brand lime — the focal action
+  scammer: "#ff6b6b", // muted coral-red
+  location: "#a78bfa", // soft purple
+  bank: "#fbbf24",    // warm amber
+  script: "#60a5fa",  // cool indigo-blue
 };
 
 export const NODE_TYPE_LABELS: Record<GraphNodeType, string> = {
   call: "Call",
   scammer: "Stem-cluster",
-  iban: "IBAN",
+  location: "Locatie",
   bank: "Bank",
   script: "Script",
 };
@@ -62,8 +62,8 @@ export function ForceGraph(props: ForceGraphProps) {
   // re-render counter so we don't re-mount the graph on every tick.
   const [, setTick] = useState(0);
 
-  // Compute degrees + alway-on labels for high-degree nodes.
-  const { fgNodes, fgLinks, alwaysLabelIds } = useMemo(() => {
+  // Compute degrees and build node/link lists for the simulation.
+  const { fgNodes, fgLinks, nodeTypeMap } = useMemo(() => {
     const degree = new Map<string, number>();
     for (const e of data.edges) {
       degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
@@ -78,11 +78,8 @@ export function ForceGraph(props: ForceGraphProps) {
       target: e.target,
       kind: e.kind,
     }));
-    // Always label the top-N most connected nodes for orientation.
-    const sortedByDegree = [...nodes].sort((a, b) => b.degree - a.degree);
-    const TOP_N = 5;
-    const ids = new Set(sortedByDegree.slice(0, TOP_N).map((n) => n.id));
-    return { fgNodes: nodes, fgLinks: links, alwaysLabelIds: ids };
+    const typeMap = new Map<string, GraphNodeType>(nodes.map((n) => [n.id, n.type]));
+    return { fgNodes: nodes, fgLinks: links, nodeTypeMap: typeMap };
   }, [data]);
 
   // Resize observer — keep the canvas in sync with its container.
@@ -187,16 +184,27 @@ export function ForceGraph(props: ForceGraphProps) {
             ctx.fillStyle = color;
             ctx.fill();
 
-            // Label: always for high-degree nodes, otherwise on hover (handled
-            // by nodeLabel prop below — appears as a tooltip).
-            if (alwaysLabelIds.has(n.id) || globalScale > 2) {
+            // Label: always visible, scaled by zoom. Dark backdrop for readability.
+            {
               const label = n.label ?? n.id;
-              const fontSize = Math.max(10, 12 / Math.max(1, globalScale * 0.9));
+              const fontSize = Math.max(8, 11 / Math.max(0.8, globalScale));
               ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
               ctx.textAlign = "center";
               ctx.textBaseline = "top";
+              const textW = ctx.measureText(label).width;
+              const textH = fontSize;
+              const labelY = y + baseR + 3;
+              const padX = 3;
+              const padY = 1.5;
+              ctx.fillStyle = "rgba(7, 8, 10, 0.72)";
+              ctx.fillRect(
+                x - textW / 2 - padX,
+                labelY - padY,
+                textW + padX * 2,
+                textH + padY * 2,
+              );
               ctx.fillStyle = "#e8eaed";
-              ctx.fillText(label, x, y + baseR + 3);
+              ctx.fillText(label, x, labelY);
             }
           }}
           nodePointerAreaPaint={(node, color, ctx) => {
@@ -213,6 +221,45 @@ export function ForceGraph(props: ForceGraphProps) {
           }}
           linkColor={() => "rgba(232, 234, 237, 0.18)"}
           linkWidth={0.8}
+          linkCanvasObject={(link, ctx, globalScale) => {
+            const src = link.source as FGNode;
+            const tgt = link.target as FGNode;
+            if (!src.x || !src.y || !tgt.x || !tgt.y) return;
+
+            // Draw the line first.
+            ctx.beginPath();
+            ctx.moveTo(src.x, src.y);
+            ctx.lineTo(tgt.x, tgt.y);
+            ctx.strokeStyle = "rgba(232, 234, 237, 0.18)";
+            ctx.lineWidth = 0.8 / globalScale;
+            ctx.stroke();
+
+            // Derive semantic label from source→target type pair.
+            const srcType = nodeTypeMap.get(typeof src === "object" ? src.id : String(src));
+            const tgtType = nodeTypeMap.get(typeof tgt === "object" ? tgt.id : String(tgt));
+            let edgeLabel = "linked";
+            if (srcType === "call" && tgtType === "scammer") edgeLabel = "identified as";
+            else if (srcType === "call" && tgtType === "bank") edgeLabel = "impersonated";
+            else if (srcType === "call" && tgtType === "script") edgeLabel = "used script";
+            else if (srcType === "scammer" && tgtType === "location") edgeLabel = "operates from";
+
+            // Only draw label when zoomed in enough to be readable.
+            if (globalScale < 0.6) return;
+
+            const mx = (src.x + tgt.x) / 2;
+            const my = (src.y + tgt.y) / 2;
+            const fontSize = Math.max(6, 8 / globalScale);
+            ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            const textW = ctx.measureText(edgeLabel).width;
+            const padX = 2.5;
+            const padY = 1.5;
+            ctx.fillStyle = "rgba(7, 8, 10, 0.8)";
+            ctx.fillRect(mx - textW / 2 - padX, my - fontSize / 2 - padY, textW + padX * 2, fontSize + padY * 2);
+            ctx.fillStyle = "rgba(232, 234, 237, 0.6)";
+            ctx.fillText(edgeLabel, mx, my);
+          }}
           linkDirectionalParticles={0}
           cooldownTicks={120}
           d3AlphaDecay={0.025}
