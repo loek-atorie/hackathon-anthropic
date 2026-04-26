@@ -1,7 +1,7 @@
 ---
 type: call
 id: test-call-0001
-recorded_at: 2026-04-25T15:43:26Z
+started_at: 2026-04-25T15:43:26Z
 language: nl
 claimed_organisation: "[[ING]]"
 script: "[[bank-helpdesk]]"
