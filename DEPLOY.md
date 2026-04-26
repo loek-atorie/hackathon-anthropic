@@ -47,7 +47,8 @@ fly secrets set \
 # fly secrets set ANTHROPIC_API_KEY=sk-ant-... VAPI_API_KEY=...
 
 # After P1 exists (Step 2), come back and set:
-# fly secrets set P1_WEBHOOK_URL="http://whale-p1.internal:8080/internal/nudge"
+# fly secrets set P1_WEBHOOK_URL="https://whale-p1.fly.dev/internal/nudge"
+# (Use the public fly.dev hostname rather than `whale-p1.internal` — see "Inter-app URLs" note below.)
 
 fly deploy
 fly logs   # watch a few seconds — you should see uvicorn boot
@@ -78,7 +79,7 @@ fly secrets set \
   VAPI_ASSISTANT_ID_SCAMMER=... \
   VAPI_PHONE_NUMBER_ID=... \
   MEVROUW_PHONE_NUMBER=... \
-  P2_INGEST_URL=http://whale-p2.internal:8080
+  P2_INGEST_URL=https://whale-p2.fly.dev
 
 fly deploy
 
@@ -89,9 +90,22 @@ Now wire whale-p2 back to whale-p1 for nudges:
 
 ```bash
 cd ../../backend
-fly secrets set P1_WEBHOOK_URL=http://whale-p1.internal:8080/internal/nudge
+fly secrets set P1_WEBHOOK_URL=https://whale-p1.fly.dev/internal/nudge
 # triggers a rolling restart on its own
 ```
+
+**Inter-app URLs — why public `*.fly.dev` and not `*.internal`?**
+Fly's 6PN private network (`<app>.internal`) is IPv6-only. The Python images
+in this repo run uvicorn with `--host 0.0.0.0` (IPv4 only — Firecracker microVMs
+have `bindv6only=1`, so binding to `::` would silently break Fly's IPv4 health
+check). Forwarding from one app to another over `<app>.internal` therefore
+gets `Connection refused`. The public `https://<app>.fly.dev` URL terminates
+TLS at Fly's edge and proxies to the IPv4 listener — same datacenter when
+both apps share `primary_region`, negligible latency penalty for fire-and-forget
+transcript posts. If you ever need true private inter-app traffic, allocate a
+flycast IP (`fly ips allocate-v6 --private`) and disable `force_https` so a
+plain `http://<app>.flycast` POST works — for this hackathon stack the public
+URL is simpler and good enough.
 
 ---
 
