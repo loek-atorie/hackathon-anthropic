@@ -62,7 +62,6 @@ async function loadVaultFromFilesystem(): Promise<GraphData> {
     locations: "location",
     banks: "bank",
     scripts: "script",
-    organisations: "organisation",
   };
 
   const nodes: GraphNode[] = [];
