@@ -15,7 +15,6 @@ type ClientFilter = "alle" | "politie" | "bank" | "telco" | "publiek";
 type TopicFilter =
   | "alle"
   | "bank-spoofing"
-  | "iban-omleiding"
   | "voice-cloning"
   | "koerier-fraude"
   | "nummer-spoofing";
@@ -31,7 +30,6 @@ const CHART_WEEKS = [
 const CHART_DATA: Record<TopicFilter, number[]> = {
   "alle":           [3, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 14],
   "bank-spoofing":  [1, 2, 2, 3, 2, 4, 3, 5,  4,  6,  5,  7 ],
-  "iban-omleiding": [1, 1, 1, 2, 2, 2, 2, 3,  3,  3,  4,  4 ],
   "voice-cloning":  [0, 1, 0, 1, 1, 1, 1, 1,  1,  2,  1,  1 ],
   "koerier-fraude": [1, 0, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1 ],
   "nummer-spoofing":[0, 1, 0, 0, 0, 1, 1, 1,  1,  1,  1,  1 ],
@@ -40,7 +38,6 @@ const CHART_DATA: Record<TopicFilter, number[]> = {
 const TOPIC_LABELS: Record<TopicFilter, string> = {
   "alle": "Alle",
   "bank-spoofing": "Bank spoofing",
-  "iban-omleiding": "IBAN-omleiding",
   "voice-cloning": "Voice cloning",
   "koerier-fraude": "Koerier-fraude",
   "nummer-spoofing": "Nummer spoofing",
@@ -51,7 +48,7 @@ const TOPIC_LABELS: Record<TopicFilter, string> = {
 function deriveStats(vault: GraphData) {
   const calls = vault.nodes.filter((n) => n.type === "call");
   const scammers = vault.nodes.filter((n) => n.type === "scammer");
-  const ibans = vault.nodes.filter((n) => n.type === "iban");
+  const locationCount = vault.nodes.filter((n) => n.type === "location").length;
 
   // Unique spoofed banks (claimed_bank references)
   const spoofedBanks = new Set<string>();
@@ -63,7 +60,7 @@ function deriveStats(vault: GraphData) {
   return {
     gesprekken: calls.length,
     daders: scammers.length,
-    ibans: ibans.length,
+    locationCount,
     spoofedBanks: spoofedBanks.size,
   };
 }
@@ -89,8 +86,8 @@ function AreaChart({ topic }: { topic: TopicFilter }) {
   const data = CHART_DATA[topic];
   const max = Math.max(...data, 1);
   const W = 600;
-  const H = 120;
-  const pad = { top: 8, right: 8, bottom: 20, left: 28 };
+  const H = 200;
+  const pad = { top: 12, right: 8, bottom: 24, left: 32 };
   const chartW = W - pad.left - pad.right;
   const chartH = H - pad.top - pad.bottom;
   const n = data.length;
@@ -114,7 +111,7 @@ function AreaChart({ topic }: { topic: TopicFilter }) {
     <svg
       viewBox={`0 0 ${W} ${H}`}
       className="w-full"
-      style={{ height: 120 }}
+      style={{ height: 200 }}
       aria-hidden
     >
       {/* Grid lines */}
@@ -304,51 +301,47 @@ function TactiekenCard({ calls }: { calls: GraphNode[] }) {
   );
 }
 
-// ─── Gevlagde IBANs card ──────────────────────────────────────────────────────
+// ─── Steden kaart card ────────────────────────────────────────────────────────
 
-const STATUS_LABEL: Record<string, string> = {
-  flagged: "Gevlagd",
-  cleared: "Vrijgegeven",
-  unknown: "Onbekend",
-};
-const STATUS_COLOR: Record<string, string> = {
-  flagged: "text-[#f87171]",
-  cleared: "text-[var(--accent)]",
-  unknown: "text-[var(--muted)]",
-};
-
-function GevlagdeIBANsCard({ ibans }: { ibans: GraphNode[] }) {
+function StadenKaartCard({ locations }: { locations: GraphNode[] }) {
+  const sorted = [...locations].sort(
+    (a, b) =>
+      (Array.isArray(b.frontmatter.seen_in_calls)
+        ? b.frontmatter.seen_in_calls.length
+        : 0) -
+      (Array.isArray(a.frontmatter.seen_in_calls)
+        ? a.frontmatter.seen_in_calls.length
+        : 0)
+  );
   return (
     <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--background-card)] px-5 py-4">
       <h3 className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
-        Gevlagde IBANs
+        Operatielocaties
       </h3>
       <div className="flex flex-col gap-2">
-        {ibans.map((n) => {
-          const iban =
-            typeof n.frontmatter.iban === "string" ? n.frontmatter.iban : n.id;
-          const status =
-            typeof n.frontmatter.status === "string"
-              ? n.frontmatter.status
-              : "unknown";
+        {sorted.map((n) => {
+          const city =
+            typeof n.frontmatter.city === "string" ? n.frontmatter.city : n.id;
+          const code =
+            typeof n.frontmatter.country_code === "string"
+              ? n.frontmatter.country_code
+              : "";
+          const count = Array.isArray(n.frontmatter.seen_in_calls)
+            ? n.frontmatter.seen_in_calls.length
+            : 0;
           return (
-            <div key={n.id} className="flex items-center justify-between gap-2">
-              <span className="truncate font-mono text-[11px] text-[var(--foreground)]">
-                {iban}
+            <div key={n.id} className="flex items-center justify-between">
+              <span className="text-sm text-[var(--foreground)]">
+                {city}{code ? `, ${code}` : ""}
               </span>
-              <span
-                className={[
-                  "shrink-0 text-[10px] uppercase tracking-[0.12em]",
-                  STATUS_COLOR[status] ?? STATUS_COLOR.unknown,
-                ].join(" ")}
-              >
-                {STATUS_LABEL[status] ?? status}
+              <span className="text-xs tabular-nums text-[var(--muted)]">
+                {count} {count === 1 ? "gesprek" : "gesprekken"}
               </span>
             </div>
           );
         })}
-        {ibans.length === 0 && (
-          <span className="text-xs text-[var(--muted)]">Geen IBANs gevonden</span>
+        {sorted.length === 0 && (
+          <span className="text-xs text-[var(--muted)]">Geen locaties gevonden</span>
         )}
       </div>
     </div>
@@ -393,8 +386,31 @@ function GespoofdeNummersCard({ calls }: { calls: GraphNode[] }) {
 
 // ─── Gesprekken preview card ──────────────────────────────────────────────────
 
+function fmtDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleDateString("nl-NL", { day: "numeric", month: "short", year: "numeric" });
+  } catch { return iso; }
+}
+
+function fmtTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+  } catch { return ""; }
+}
+
+function toIso(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v instanceof Date) return v.toISOString();
+  return "";
+}
+
 function GesprekkenPreviewCard({ calls }: { calls: GraphNode[] }) {
-  const preview = calls.slice(0, 3);
+  const sorted = [...calls].sort((a, b) => {
+    const aDate = toIso(a.frontmatter.started_at);
+    const bDate = toIso(b.frontmatter.started_at);
+    return bDate.localeCompare(aDate);
+  });
+  const preview = sorted.slice(0, 5);
   return (
     <div className="flex flex-col rounded-lg border border-[var(--border)] bg-[var(--background-card)]">
       <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-3">
@@ -414,6 +430,7 @@ function GesprekkenPreviewCard({ calls }: { calls: GraphNode[] }) {
             typeof call.frontmatter.id === "string"
               ? call.frontmatter.id
               : call.id;
+          const startedAt = toIso(call.frontmatter.started_at);
           const bank =
             typeof call.frontmatter.claimed_bank === "string"
               ? call.frontmatter.claimed_bank.replace(/\[\[|\]\]/g, "")
@@ -430,6 +447,16 @@ function GesprekkenPreviewCard({ calls }: { calls: GraphNode[] }) {
               <span className="w-20 shrink-0 font-mono text-[11px] text-[var(--muted)]">
                 {id}
               </span>
+              <div className="flex w-24 shrink-0 flex-col gap-0.5">
+                {startedAt ? (
+                  <>
+                    <span className="text-[11px] text-[var(--foreground)]">{fmtDate(startedAt)}</span>
+                    <span className="text-[10px] tabular-nums text-[var(--muted)]">{fmtTime(startedAt)}</span>
+                  </>
+                ) : (
+                  <span className="text-[11px] text-[var(--muted)]">—</span>
+                )}
+              </div>
               <div className="flex flex-1 flex-wrap gap-1">
                 {tactics.map((t) => (
                   <span
@@ -472,7 +499,7 @@ export function DashboardView({ vault, callIds }: Props) {
   const [topicFilter, setTopicFilter] = useState<TopicFilter>("alle");
 
   const calls = vault.nodes.filter((n) => n.type === "call");
-  const ibans = vault.nodes.filter((n) => n.type === "iban");
+  const locations = vault.nodes.filter((n) => n.type === "location");
   const stats = deriveStats(vault);
 
   return (
@@ -517,9 +544,9 @@ export function DashboardView({ vault, callIds }: Props) {
             delta={`${stats.daders} clusters geïdentificeerd`}
           />
           <StatCard
-            label="IBANs gevlagd"
-            value={stats.ibans}
-            delta="Gemeld bij banken"
+            label="Locaties"
+            value={stats.locationCount}
+            delta="Unieke operatielocaties"
           />
           <StatCard
             label="Gespoofde nummers"
@@ -528,39 +555,40 @@ export function DashboardView({ vault, callIds }: Props) {
           />
         </div>
 
-        {/* Area chart */}
-        <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--background-card)] px-5 py-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
-              Gesprekken over tijd
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {(Object.keys(TOPIC_LABELS) as TopicFilter[]).map((key) => (
-                <button
-                  key={key}
-                  onClick={() => setTopicFilter(key)}
-                  className={[
-                    "rounded-full border px-2.5 py-0.5 text-[11px] transition-colors",
-                    topicFilter === key
-                      ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                      : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--foreground)]",
-                  ].join(" ")}
-                >
-                  {TOPIC_LABELS[key]}
-                </button>
-              ))}
+        {/* Area chart + gesprekken preview — side by side */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="flex flex-col gap-4 rounded-lg border border-[var(--border)] bg-[var(--background-card)] px-5 py-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h3 className="text-[11px] uppercase tracking-[0.14em] text-[var(--muted)]">
+                Gesprekken over tijd
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {(Object.keys(TOPIC_LABELS) as TopicFilter[]).map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => setTopicFilter(key)}
+                    className={[
+                      "rounded-full border px-2.5 py-0.5 text-[11px] transition-colors",
+                      topicFilter === key
+                        ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
+                        : "border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)] hover:text-[var(--foreground)]",
+                    ].join(" ")}
+                  >
+                    {TOPIC_LABELS[key]}
+                  </button>
+                ))}
+              </div>
             </div>
+            <AreaChart topic={topicFilter} />
           </div>
-          <AreaChart topic={topicFilter} />
-        </div>
 
-        {/* Gesprekken preview */}
-        <GesprekkenPreviewCard calls={calls} />
+          <GesprekkenPreviewCard calls={calls} />
+        </div>
 
         {/* Bottom analytics grid */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <TactiekenCard calls={calls} />
-          <GevlagdeIBANsCard ibans={ibans} />
+          <StadenKaartCard locations={locations} />
           <GespoofdeNummersCard calls={calls} />
         </div>
       </div>
