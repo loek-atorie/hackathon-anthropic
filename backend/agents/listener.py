@@ -7,6 +7,7 @@ to all SSE consumers via POST /publish.
 Reson8 MCP is the intended upstream; Claude is the fallback (plan risk note).
 """
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -36,17 +37,36 @@ _call_extractions: dict[str, dict[str, object]] = {}
 # than the dashboard's "BANK" label but maps onto the same wire field.
 _WIRE_FIELDS = (
     "claimed_bank",
-    "iban",
+    "location",
     "callback_number",
     "tactics",
     "urgency_score",
     "script_signature",
 )
 
+# Demo: each call gets a deterministic random European city (origin of the
+# scammer infrastructure). We don't extract this from the transcript — Claude's
+# tool schema doesn't expose location yet — so the value is a stable hash of
+# call_id mapped onto a small list. Same call always picks the same city; two
+# calls in a row almost certainly pick different ones.
+_EUROPEAN_CITIES = (
+    "Amsterdam, NL", "Belgrade, RS", "Bucharest, RO", "Sofia, BG", "Warsaw, PL",
+    "Lisbon, PT", "Riga, LV", "Tallinn, EE", "Vilnius, LT", "Budapest, HU",
+    "Prague, CZ", "Berlin, DE", "Madrid, ES", "Rome, IT", "Athens, GR",
+    "Vienna, AT", "Zagreb, HR", "Helsinki, FI", "Tirana, AL", "Skopje, MK",
+)
 
-def _wire_value(extraction: "Extraction", wire_field: str) -> object:
+
+def _demo_location_for_call(call_id: str) -> str:
+    digest = hashlib.md5(call_id.encode()).digest()
+    return _EUROPEAN_CITIES[digest[0] % len(_EUROPEAN_CITIES)]
+
+
+def _wire_value(extraction: "Extraction", wire_field: str, call_id: str) -> object:
     if wire_field == "claimed_bank":
         return extraction.claimed_organisation
+    if wire_field == "location":
+        return _demo_location_for_call(call_id)
     return getattr(extraction, wire_field, None)
 
 
@@ -206,7 +226,7 @@ async def process_and_publish(
         # is the shape /live's ExtractionSidebar renders.
         last = _call_extractions.setdefault(call_id, {})
         for wire_field in _WIRE_FIELDS:
-            value = _wire_value(extraction, wire_field)
+            value = _wire_value(extraction, wire_field, call_id)
             # Skip falsy/empty so the sidebar keeps its "wachten op extractie..."
             # placeholder until Claude actually has something to report.
             if value in (None, "", 0, []):
