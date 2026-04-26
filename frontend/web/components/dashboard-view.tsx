@@ -28,11 +28,11 @@ const CHART_WEEKS = [
 ];
 
 const CHART_DATA: Record<TopicFilter, number[]> = {
-  "alle":           [1, 2, 3, 4, 5, 6, 7, 8,  9,  10, 11, 12],
-  "bank-spoofing":  [0, 1, 1, 2, 2, 3, 4, 5,  6,  7,  7,  8 ],
-  "voice-cloning":  [0, 0, 1, 1, 1, 2, 2, 2,  2,  2,  2,  2 ],
-  "koerier-fraude": [0, 0, 0, 1, 1, 1, 1, 2,  2,  2,  2,  2 ],
-  "nummer-spoofing":[0, 0, 1, 1, 1, 1, 1, 1,  1,  2,  2,  2 ],
+  "alle":           [0, 1, 1, 2, 3, 4, 5, 7,  8,  10, 11, 12],
+  "bank-spoofing":  [0, 0, 1, 1, 2, 2, 3, 4,  5,  6,  7,  8 ],
+  "voice-cloning":  [0, 0, 0, 1, 1, 1, 2, 2,  2,  2,  2,  2 ],
+  "koerier-fraude": [0, 0, 0, 0, 1, 1, 1, 1,  2,  2,  2,  2 ],
+  "nummer-spoofing":[0, 0, 0, 1, 1, 1, 1, 1,  1,  2,  2,  2 ],
 };
 
 const TOPIC_LABELS: Record<TopicFilter, string> = {
@@ -95,14 +95,13 @@ function AreaChart({ topic }: { topic: TopicFilter }) {
   const xOf = (i: number) => pad.left + (i / (n - 1)) * chartW;
   const yOf = (v: number) => pad.top + chartH - (v / max) * chartH;
 
-  const pts = data.map((v, i) => `${xOf(i)},${yOf(v)}`).join(" ");
-  const area = [
-    `M${xOf(0)},${yOf(data[0])}`,
-    ...data.slice(1).map((v, i) => `L${xOf(i + 1)},${yOf(v)}`),
-    `L${xOf(n - 1)},${pad.top + chartH}`,
-    `L${xOf(0)},${pad.top + chartH}`,
-    "Z",
-  ].join(" ");
+  // Build a smooth cubic-bezier path through all data points.
+  const smoothD = data.reduce((acc, v, i) => {
+    if (i === 0) return `M${xOf(0)},${yOf(v)}`;
+    const cpX = (xOf(i) + xOf(i - 1)) / 2;
+    return `${acc} C${cpX},${yOf(data[i - 1])} ${cpX},${yOf(v)} ${xOf(i)},${yOf(v)}`;
+  }, "");
+  const area = `${smoothD} L${xOf(n - 1)},${pad.top + chartH} L${xOf(0)},${pad.top + chartH} Z`;
 
   // Y-axis labels
   const yLabels = [0, Math.round(max / 2), max];
@@ -163,8 +162,8 @@ function AreaChart({ topic }: { topic: TopicFilter }) {
       <path d={area} fill="url(#areaGrad)" />
 
       {/* Line */}
-      <polyline
-        points={pts}
+      <path
+        d={smoothD}
         fill="none"
         stroke="var(--accent)"
         strokeWidth={1.5}
