@@ -152,35 +152,41 @@ function AreaChart({ topic }: { topic: TopicFilter }) {
         ) : null,
       )}
 
-      {/* Filled area */}
+      {/* Filled area + glow */}
       <defs>
         <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.18" />
-          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.28" />
+          <stop offset="75%" stopColor="var(--accent)" stopOpacity="0.06" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
         </linearGradient>
+        <filter id="lineGlow" x="-10%" y="-50%" width="120%" height="200%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
       </defs>
       <path d={area} fill="url(#areaGrad)" />
+
+      {/* Glow layer */}
+      <path
+        d={smoothD}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth={4}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        strokeOpacity={0.25}
+        filter="url(#lineGlow)"
+      />
 
       {/* Line */}
       <path
         d={smoothD}
         fill="none"
         stroke="var(--accent)"
-        strokeWidth={1.5}
+        strokeWidth={2}
         strokeLinejoin="round"
         strokeLinecap="round"
       />
-
-      {/* Dots */}
-      {data.map((v, i) => (
-        <circle
-          key={i}
-          cx={xOf(i)}
-          cy={yOf(v)}
-          r={2.5}
-          fill="var(--accent)"
-        />
-      ))}
     </svg>
   );
 }
