@@ -11,19 +11,35 @@ const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
 });
 
 export const NODE_COLORS: Record<GraphNodeType, string> = {
-  call: "#d4ff3a",    // brand lime — the focal action
-  scammer: "#ff6b6b", // muted coral-red
-  location: "#a78bfa", // soft purple
-  bank: "#fbbf24",    // warm amber
-  script: "#60a5fa",  // cool indigo-blue
+  call:     "#00cfff", // cyan — neutral hub
+  scammer:  "#ff4444", // red — threat actor
+  location: "#a78bfa", // purple — geography
+  bank:     "#33ff99", // green — legitimate institution
+  script:   "#cc66ff", // purple-pink — conversation method
 };
 
 export const NODE_TYPE_LABELS: Record<GraphNodeType, string> = {
-  call: "Call",
-  scammer: "Stem-cluster",
+  call:     "Call",
+  scammer:  "Scammer",
   location: "Locatie",
-  bank: "Bank",
-  script: "Script",
+  bank:     "Bank",
+  script:   "Script",
+};
+
+// Zone centers as fractions of canvas dimensions (used for cluster forces + ghost ellipses)
+const ZONE_FX: Record<GraphNodeType, number> = {
+  scammer:  0.20,
+  call:     0.50,
+  location: 0.20,
+  bank:     0.80,
+  script:   0.80,
+};
+const ZONE_FY: Record<GraphNodeType, number> = {
+  scammer:  0.22,
+  call:     0.50,
+  location: 0.78,
+  bank:     0.22,
+  script:   0.78,
 };
 
 /** Internal force-graph node — superset of GraphNode that the lib mutates. */
@@ -51,10 +67,12 @@ interface ForceGraphProps {
   onNodeClick?: (node: GraphNode) => void;
   /** Optional currently-selected node id — drawn with a ring. */
   selectedId?: string | null;
+  /** When non-empty, all nodes NOT in this set are dimmed to ~8% opacity. */
+  neighborhoodIds?: ReadonlySet<string>;
 }
 
 export function ForceGraph(props: ForceGraphProps) {
-  const { data, highlightedIds, onNodeClick, selectedId } = props;
+  const { data, highlightedIds, onNodeClick, selectedId, neighborhoodIds } = props;
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<unknown>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -123,23 +141,95 @@ export function ForceGraph(props: ForceGraphProps) {
     fgRef.current = graphRef;
     const fg = graphRef as
       | {
-          d3Force: (name: string) => { distance?: (d: number) => unknown; strength?: (s: number) => unknown } | undefined;
+          d3Force: (
+            name: string,
+            force?: unknown,
+          ) => { distance?: (d: number) => unknown; strength?: (s: number) => unknown } | undefined;
         }
       | null;
     if (!fg) return;
     try {
-      // Tune for calm steady-state.
       const linkForce = fg.d3Force("link");
-      linkForce?.distance?.(70);
+      linkForce?.distance?.(80);
       const chargeForce = fg.d3Force("charge");
-      chargeForce?.strength?.(-180);
+      chargeForce?.strength?.(-220);
+
+      // Soft cluster attraction — same-type nodes drift toward their zone center.
+      // Strength 0.06 is intentionally weak so cross-cluster edges can pull nodes between zones.
+      const d3 = (
+        window as unknown as {
+          d3?: {
+            forceX: (fn: (n: unknown) => number) => { strength: (s: number) => unknown };
+            forceY: (fn: (n: unknown) => number) => { strength: (s: number) => unknown };
+          };
+        }
+      ).d3;
+      if (d3 && size.w > 0 && size.h > 0) {
+        fg.d3Force(
+          "clusterX",
+          d3.forceX((node: unknown) => {
+            const n = node as FGNode;
+            return size.w * (ZONE_FX[n.type] ?? 0.5);
+          }).strength(0.06),
+        );
+        fg.d3Force(
+          "clusterY",
+          d3.forceY((node: unknown) => {
+            const n = node as FGNode;
+            return size.h * (ZONE_FY[n.type] ?? 0.5);
+          }).strength(0.06),
+        );
+      }
     } catch {
-      // Some d3 versions don't expose these; not fatal.
+      // Some d3 versions don't expose these; clustering degrades gracefully.
     }
   };
 
+  // Ghost zone ellipse definitions — rendered as SVG underlay behind the canvas.
+  const clusterZones = size.w > 0 && size.h > 0
+    ? (Object.keys(NODE_COLORS) as GraphNodeType[]).map((type) => ({
+        type,
+        cx: size.w * ZONE_FX[type],
+        cy: size.h * ZONE_FY[type],
+        rx: size.w * 0.13,
+        ry: size.h * 0.16,
+        color: NODE_COLORS[type],
+        label: NODE_TYPE_LABELS[type].toUpperCase(),
+      }))
+    : [];
+
   return (
     <div ref={containerRef} className="relative h-full w-full">
+      {/* Cluster ghost zones — decorative SVG underlay */}
+      {size.w > 0 && size.h > 0 && (
+        <svg
+          className="pointer-events-none absolute inset-0"
+          width={size.w}
+          height={size.h}
+          aria-hidden
+        >
+          {clusterZones.map((z) => (
+            <g key={z.type}>
+              <ellipse
+                cx={z.cx} cy={z.cy} rx={z.rx} ry={z.ry}
+                fill={z.color} fillOpacity={0.04}
+                stroke={z.color} strokeOpacity={0.12} strokeWidth={1}
+              />
+              <text
+                x={z.cx} y={z.cy - z.ry - 8}
+                textAnchor="middle"
+                fill={z.color} fillOpacity={0.3}
+                fontSize={9} fontWeight={700}
+                letterSpacing="0.1em"
+                style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
+              >
+                {z.label}
+              </text>
+            </g>
+          ))}
+        </svg>
+      )}
+
       {size.w > 0 && size.h > 0 ? (
         <ForceGraph2D
           ref={onEngineRef as never}
@@ -148,7 +238,6 @@ export function ForceGraph(props: ForceGraphProps) {
           graphData={{ nodes: fgNodes, links: fgLinks }}
           backgroundColor="rgba(7, 8, 10, 0)"
           nodeRelSize={4}
-          // We render nodes ourselves so we can add labels + highlight rings.
           nodeCanvasObject={(node, ctx, globalScale) => {
             const n = node as FGNode;
             const baseR = 4 + Math.min(8, Math.sqrt(n.degree) * 1.7);
@@ -156,10 +245,14 @@ export function ForceGraph(props: ForceGraphProps) {
             const x = n.x ?? 0;
             const y = n.y ?? 0;
 
+            const isDimmed =
+              neighborhoodIds && neighborhoodIds.size > 0 && !neighborhoodIds.has(n.id);
+            const isSelected = selectedId === n.id;
+
             // Highlight pulse for newly-inserted nodes.
-            if (highlightedIds?.has(n.id)) {
-              const t = (Date.now() % 1400) / 1400; // 0..1
-              const pulseR = baseR + 4 + Math.sin(t * Math.PI * 2) * 4 + 4;
+            if (!isDimmed && highlightedIds?.has(n.id)) {
+              const t = (Date.now() % 1400) / 1400;
+              const pulseR = baseR + 4 + Math.sin(t * Math.PI * 2) * 4;
               ctx.beginPath();
               ctx.arc(x, y, pulseR, 0, Math.PI * 2);
               ctx.strokeStyle = color;
@@ -169,22 +262,40 @@ export function ForceGraph(props: ForceGraphProps) {
               ctx.globalAlpha = 1;
             }
 
-            // Selected ring.
-            if (selectedId && selectedId === n.id) {
+            // Selected: double ring (outer faint, inner solid)
+            if (isSelected) {
+              ctx.globalAlpha = 0.2;
               ctx.beginPath();
-              ctx.arc(x, y, baseR + 3, 0, Math.PI * 2);
-              ctx.strokeStyle = "#e8eaed";
+              ctx.arc(x, y, baseR + 8, 0, Math.PI * 2);
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 2 / globalScale;
+              ctx.stroke();
+
+              ctx.globalAlpha = 0.5;
+              ctx.beginPath();
+              ctx.arc(x, y, baseR + 4, 0, Math.PI * 2);
+              ctx.strokeStyle = color;
               ctx.lineWidth = 1.5 / globalScale;
               ctx.stroke();
+
+              ctx.globalAlpha = 1;
             }
 
             // The node itself.
+            ctx.globalAlpha = isDimmed ? 0.08 : 1;
             ctx.beginPath();
             ctx.arc(x, y, baseR, 0, Math.PI * 2);
             ctx.fillStyle = color;
-            ctx.fill();
 
-            // Label: always visible, scaled by zoom. Dark backdrop for readability.
+            // Glow for non-dimmed nodes
+            if (!isDimmed) {
+              ctx.shadowColor = color;
+              ctx.shadowBlur = isSelected ? 12 : 5;
+            }
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Label
             {
               const label = n.label ?? n.id;
               const fontSize = Math.max(8, 11 / Math.max(0.8, globalScale));
@@ -203,9 +314,11 @@ export function ForceGraph(props: ForceGraphProps) {
                 textW + padX * 2,
                 textH + padY * 2,
               );
-              ctx.fillStyle = "#e8eaed";
+              ctx.fillStyle = isDimmed ? "rgba(232,234,237,0.2)" : "#e8eaed";
               ctx.fillText(label, x, labelY);
             }
+
+            ctx.globalAlpha = 1;
           }}
           nodePointerAreaPaint={(node, color, ctx) => {
             const n = node as FGNode;
@@ -219,46 +332,85 @@ export function ForceGraph(props: ForceGraphProps) {
             const n = node as FGNode;
             return `${n.label} · ${NODE_TYPE_LABELS[n.type]}`;
           }}
-          linkColor={() => "rgba(232, 234, 237, 0.18)"}
-          linkWidth={0.8}
+          linkColor={() => "rgba(0,0,0,0)"}
+          linkWidth={0}
           linkCanvasObject={(link, ctx, globalScale) => {
             const src = link.source as FGNode;
             const tgt = link.target as FGNode;
-            if (!src.x || !src.y || !tgt.x || !tgt.y) return;
+            if (src.x == null || src.y == null || tgt.x == null || tgt.y == null) return;
 
-            // Draw the line first.
+            const srcType = nodeTypeMap.get(src.id);
+            const tgtType = nodeTypeMap.get(tgt.id);
+
+            // Edge color matches target node type
+            const edgeColor = NODE_COLORS[tgtType ?? "call"] ?? "rgba(232,234,237,0.18)";
+
+            // Semantic label
+            let edgeLabel = "linked";
+            if (srcType === "call" && tgtType === "scammer")        edgeLabel = "identified as";
+            else if (srcType === "scammer" && tgtType === "location") edgeLabel = "operates from";
+            else if (srcType === "call" && tgtType === "bank")       edgeLabel = "impersonated";
+            else if (srcType === "call" && tgtType === "script")     edgeLabel = "used script";
+
+            // Dimming: fade edges where either endpoint is outside the neighborhood
+            const srcIn = !neighborhoodIds || neighborhoodIds.size === 0 || neighborhoodIds.has(src.id);
+            const tgtIn = !neighborhoodIds || neighborhoodIds.size === 0 || neighborhoodIds.has(tgt.id);
+            const edgeDimmed = !(srcIn && tgtIn);
+            const edgeAlpha = edgeDimmed ? 0.05 : 0.65;
+
+            // Line
             ctx.beginPath();
             ctx.moveTo(src.x, src.y);
             ctx.lineTo(tgt.x, tgt.y);
-            ctx.strokeStyle = "rgba(232, 234, 237, 0.18)";
-            ctx.lineWidth = 0.8 / globalScale;
+            ctx.strokeStyle = edgeColor;
+            ctx.globalAlpha = edgeAlpha;
+            ctx.lineWidth = (srcType === "scammer" || tgtType === "scammer" ? 2 : 1.5) / globalScale;
             ctx.stroke();
 
-            // Derive semantic label from source→target type pair.
-            const srcType = nodeTypeMap.get(typeof src === "object" ? src.id : String(src));
-            const tgtType = nodeTypeMap.get(typeof tgt === "object" ? tgt.id : String(tgt));
-            let edgeLabel = "linked";
-            if (srcType === "call" && tgtType === "scammer") edgeLabel = "identified as";
-            else if (srcType === "call" && tgtType === "bank") edgeLabel = "impersonated";
-            else if (srcType === "call" && tgtType === "script") edgeLabel = "used script";
-            else if (srcType === "scammer" && tgtType === "location") edgeLabel = "operates from";
+            // Arrowhead (only when not dimmed)
+            if (!edgeDimmed) {
+              const angle = Math.atan2(tgt.y - src.y, tgt.x - src.x);
+              const tgtR = 4 + Math.min(8, Math.sqrt((tgt as FGNode).degree) * 1.7);
+              const ax = tgt.x - Math.cos(angle) * (tgtR + 3 / globalScale);
+              const ay = tgt.y - Math.sin(angle) * (tgtR + 3 / globalScale);
+              const arrowLen = 7 / globalScale;
+              const arrowAngle = 0.4;
+              ctx.beginPath();
+              ctx.moveTo(ax, ay);
+              ctx.lineTo(
+                ax - arrowLen * Math.cos(angle - arrowAngle),
+                ay - arrowLen * Math.sin(angle - arrowAngle),
+              );
+              ctx.lineTo(
+                ax - arrowLen * Math.cos(angle + arrowAngle),
+                ay - arrowLen * Math.sin(angle + arrowAngle),
+              );
+              ctx.closePath();
+              ctx.fillStyle = edgeColor;
+              ctx.globalAlpha = edgeAlpha;
+              ctx.fill();
+            }
 
-            // Only draw label when zoomed in enough to be readable.
-            if (globalScale < 0.6) return;
+            // Edge label — always visible (no zoom gate), only when not dimmed
+            if (!edgeDimmed) {
+              const mx = (src.x + tgt.x) / 2;
+              const my = (src.y + tgt.y) / 2;
+              const fontSize = Math.max(6, 8 / globalScale);
+              ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "middle";
+              const textW = ctx.measureText(edgeLabel).width;
+              const padX = 2.5;
+              const padY = 1.5;
+              ctx.fillStyle = "rgba(7, 8, 10, 0.8)";
+              ctx.globalAlpha = 0.8;
+              ctx.fillRect(mx - textW / 2 - padX, my - fontSize / 2 - padY, textW + padX * 2, fontSize + padY * 2);
+              ctx.fillStyle = edgeColor;
+              ctx.globalAlpha = 0.55;
+              ctx.fillText(edgeLabel, mx, my);
+            }
 
-            const mx = (src.x + tgt.x) / 2;
-            const my = (src.y + tgt.y) / 2;
-            const fontSize = Math.max(6, 8 / globalScale);
-            ctx.font = `${fontSize}px ui-sans-serif, system-ui, sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            const textW = ctx.measureText(edgeLabel).width;
-            const padX = 2.5;
-            const padY = 1.5;
-            ctx.fillStyle = "rgba(7, 8, 10, 0.8)";
-            ctx.fillRect(mx - textW / 2 - padX, my - fontSize / 2 - padY, textW + padX * 2, fontSize + padY * 2);
-            ctx.fillStyle = "rgba(232, 234, 237, 0.6)";
-            ctx.fillText(edgeLabel, mx, my);
+            ctx.globalAlpha = 1;
           }}
           linkDirectionalParticles={0}
           cooldownTicks={120}
