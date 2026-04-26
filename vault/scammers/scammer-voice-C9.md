@@ -3,6 +3,7 @@ type: scammer
 cluster_id: scammer-voice-C9
 first_seen: 2026-04-20T13:11:04Z
 seen_in_calls: ["[[call-0034]]", "[[call-0040]]"]
+location: "[[sofia]]"
 notes: "Telco-helpdesk script. Jonge man, Rotterdams accent. Gebruikt TeamViewer-trucje."
 ---
 # Scammer cluster C9
