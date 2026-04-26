@@ -17,6 +17,10 @@ _P2_INGEST_URL = os.getenv("P2_INGEST_URL", "")
 
 _ROLE_MAP = {"user": "scammer", "assistant": "mevrouw"}
 
+# Per-call wall-clock anchor (epoch ms) so t_offset_ms is "ms since first event".
+# Cleared on end-of-call-report. Bounded by call lifetime.
+_call_start_ms: dict[str, int] = {}
+
 
 async def _forward_to_p2(path: str, payload: dict) -> None:
     """Fire-and-forget POST to P2. Logs on failure so silent breakage is visible."""
@@ -50,8 +54,12 @@ async def vapi_webhook(request: Request) -> dict[str, Any]:
     if msg_type == "transcript":
         raw_role = message.get("role", "")
         speaker = _ROLE_MAP.get(raw_role, raw_role)
-        timestamp_ms = message.get("timestamp")
-        t_offset_ms = int(timestamp_ms * 1000) if timestamp_ms is not None else int(time.time() * 1000)
+        # Vapi `message.timestamp` is already epoch-ms. Convert to ms-since-call-start
+        # because that's what `t_offset_ms` means in the frontend contract (see types.ts).
+        ts = message.get("timestamp")
+        now_ms = int(ts) if ts is not None else int(time.time() * 1000)
+        start_ms = _call_start_ms.setdefault(call_id, now_ms)
+        t_offset_ms = max(0, now_ms - start_ms)
         event = {
             "type": "transcript_delta",
             "call_id": call_id,
@@ -82,6 +90,7 @@ async def vapi_webhook(request: Request) -> dict[str, Any]:
     elif msg_type == "end-of-call-report":
         # P2's Reporter agent triggers from this event.
         clear_current_call(call_id)
+        _call_start_ms.pop(call_id, None)
         duration_s = message.get("durationSeconds") or message.get("duration_seconds") or 0
         event = {
             "type": "call_ended",
