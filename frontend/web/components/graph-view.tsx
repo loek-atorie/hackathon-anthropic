@@ -306,7 +306,7 @@ function NodeInfoCard({ node, onClose }: { node: GraphNode; onClose: () => void 
             )}
             {fm.claimed_bank != null && (
               <InfoRow label="Doet zich voor als">
-                <ChipList items={[String(fm.claimed_bank)]} color="#33ff99" />
+                <ChipList items={[stripWikilink(String(fm.claimed_bank))]} color="#33ff99" />
               </InfoRow>
             )}
             {fm.script != null && (
