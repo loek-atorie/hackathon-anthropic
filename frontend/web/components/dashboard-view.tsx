@@ -28,11 +28,11 @@ const CHART_WEEKS = [
 ];
 
 const CHART_DATA: Record<TopicFilter, number[]> = {
-  "alle":           [3, 5, 4, 7, 6, 9, 8, 11, 10, 13, 12, 14],
-  "bank-spoofing":  [1, 2, 2, 3, 2, 4, 3, 5,  4,  6,  5,  7 ],
-  "voice-cloning":  [0, 1, 0, 1, 1, 1, 1, 1,  1,  2,  1,  1 ],
-  "koerier-fraude": [1, 0, 1, 1, 1, 1, 1, 1,  1,  1,  1,  1 ],
-  "nummer-spoofing":[0, 1, 0, 0, 0, 1, 1, 1,  1,  1,  1,  1 ],
+  "alle":           [1, 2, 3, 4, 5, 6, 7, 8,  9,  10, 11, 12],
+  "bank-spoofing":  [0, 1, 1, 2, 2, 3, 4, 5,  6,  7,  7,  8 ],
+  "voice-cloning":  [0, 0, 1, 1, 1, 2, 2, 2,  2,  2,  2,  2 ],
+  "koerier-fraude": [0, 0, 0, 1, 1, 1, 1, 2,  2,  2,  2,  2 ],
+  "nummer-spoofing":[0, 0, 1, 1, 1, 1, 1, 1,  1,  2,  2,  2 ],
 };
 
 const TOPIC_LABELS: Record<TopicFilter, string> = {
@@ -199,11 +199,9 @@ const CLIENT_FILTERS: Array<{ key: ClientFilter; label: string }> = [
 function ClientFilterBar({
   active,
   onSelect,
-  callCount,
 }: {
   active: ClientFilter;
   onSelect: (f: ClientFilter) => void;
-  callCount: number;
 }) {
   return (
     <div className="border-b border-[var(--border)] bg-[var(--background)]">
@@ -222,11 +220,6 @@ function ClientFilterBar({
               ].join(" ")}
             >
               {label}
-              {key === "alle" && (
-                <span className="rounded bg-[var(--background-elev)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
-                  {callCount}
-                </span>
-              )}
               {isActive && (
                 <span className="absolute inset-x-3 -bottom-[1px] h-px bg-[var(--accent)]" />
               )}
@@ -494,7 +487,7 @@ function GesprekkenPreviewCard({ calls }: { calls: GraphNode[] }) {
 
 // ─── Main dashboard component ─────────────────────────────────────────────────
 
-export function DashboardView({ vault, callIds }: Props) {
+export function DashboardView({ vault }: Props) {
   const [clientFilter, setClientFilter] = useState<ClientFilter>("alle");
   const [topicFilter, setTopicFilter] = useState<TopicFilter>("alle");
 
@@ -507,7 +500,6 @@ export function DashboardView({ vault, callIds }: Props) {
       <ClientFilterBar
         active={clientFilter}
         onSelect={setClientFilter}
-        callCount={callIds.length}
       />
 
       <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-8 px-6 py-10">
