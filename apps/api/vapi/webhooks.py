@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from typing import Any
@@ -8,6 +9,8 @@ from fastapi import APIRouter, Request
 from streaming import bus
 from vapi.outbound import clear_current_call
 
+log = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/vapi", tags=["vapi"])
 
 _P2_INGEST_URL = os.getenv("P2_INGEST_URL", "")
@@ -16,14 +19,14 @@ _ROLE_MAP = {"user": "scammer", "assistant": "mevrouw"}
 
 
 async def _forward_to_p2(path: str, payload: dict) -> None:
-    """Fire-and-forget POST to P2. Silently drops on timeout/error."""
+    """Fire-and-forget POST to P2. Logs on failure so silent breakage is visible."""
     if not _P2_INGEST_URL:
         return
     try:
         async with httpx.AsyncClient() as client:
             await client.post(f"{_P2_INGEST_URL.rstrip('/')}{path}", json=payload, timeout=2.0)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("forward_to_p2 failed: path=%s err=%s", path, e)
 
 
 @router.post("/webhooks")
