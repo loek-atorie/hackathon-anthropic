@@ -3,6 +3,7 @@ type: scammer
 cluster_id: scammer-voice-D4
 first_seen: 2026-04-22T16:33:09Z
 seen_in_calls: ["[[call-0037]]"]
+location: "[[warsaw]]"
 notes: "Diepe zakelijke stem. Politie-frame. Eerst gehoord in week van 22 april."
 ---
 # Scammer cluster D4

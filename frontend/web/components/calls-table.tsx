@@ -19,7 +19,7 @@ interface CallRow {
   durationS: number;
   claimedBank: string;
   tactics: string[];
-  iban: string;
+  location: string;
   script: string;
   scammer: string;
   reports: Set<Stakeholder>;
@@ -30,6 +30,12 @@ interface CallRow {
 
 function stripWikilink(s: string): string {
   return s.replace(/\[\[|\]\]/g, "").trim();
+}
+
+function toIso(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v instanceof Date) return v.toISOString();
+  return "";
 }
 
 function formatDuration(s: number): string {
@@ -74,13 +80,14 @@ function buildRows(vault: GraphData, callIds: string[]): CallRow[] {
   // All four stakeholders are always generated together, so if an ID is in the
   // list we treat all four as present.
   const reportSet = new Set(callIds);
-  const callNodes = vault.nodes.filter((n) => n.type === "call");
+  const allNodes = vault.nodes;
+  const callNodes = allNodes.filter((n) => n.type === "call");
 
   return callNodes
     .map((node) => {
       const fm = node.frontmatter;
       const id = typeof fm.id === "string" ? fm.id : node.id;
-      const startedAt = typeof fm.started_at === "string" ? fm.started_at : "";
+      const startedAt = toIso(fm.started_at);
       const durationS =
         typeof fm.duration_s === "number" ? fm.duration_s : 0;
       const claimedBank =
@@ -90,13 +97,25 @@ function buildRows(vault: GraphData, callIds: string[]): CallRow[] {
       const tactics = Array.isArray(fm.tactics)
         ? (fm.tactics as string[]).map(String)
         : [];
-      const rawIbans = Array.isArray(fm.extracted_ibans)
-        ? fm.extracted_ibans
-        : [];
-      const iban =
-        rawIbans.length > 0
-          ? stripWikilink(String(rawIbans[0]))
+
+      // Resolve location: call → scammer → location node
+      const scammerSlug = stripWikilink(
+        typeof fm.scammer === "string" ? fm.scammer : ""
+      );
+      const scammerNode = allNodes.find((n) => n.id === scammerSlug);
+      const locationSlug = scammerNode
+        ? stripWikilink(
+            typeof scammerNode.frontmatter.location === "string"
+              ? scammerNode.frontmatter.location
+              : ""
+          )
+        : "";
+      const locationNode = allNodes.find((n) => n.id === locationSlug);
+      const location =
+        locationNode && typeof locationNode.frontmatter.city === "string"
+          ? `${locationNode.frontmatter.city}, ${locationNode.frontmatter.country_code ?? ""}`
           : "—";
+
       const script =
         typeof fm.script === "string" ? stripWikilink(fm.script) : "—";
       const scammer =
@@ -114,7 +133,7 @@ function buildRows(vault: GraphData, callIds: string[]): CallRow[] {
         durationS,
         claimedBank,
         tactics,
-        iban,
+        location,
         script,
         scammer,
         reports,
@@ -180,9 +199,9 @@ function ExpandedDetail({ row }: { row: CallRow }) {
             Extracties
           </h4>
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
-            <dt className="text-[var(--muted)]">IBAN</dt>
-            <dd className="truncate font-mono text-[var(--foreground)]">
-              {row.iban}
+            <dt className="text-[var(--muted)]">Locatie</dt>
+            <dd className="text-[var(--foreground)]">
+              {row.location}
             </dd>
             <dt className="text-[var(--muted)]">Geïmiteerde bank</dt>
             <dd className="text-[var(--foreground)]">{row.claimedBank}</dd>
@@ -322,10 +341,11 @@ export function CallsTable({ vault, callIds }: Props) {
       <div
         className="grid items-center gap-4 border-b border-[var(--border)] px-4 py-2 text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]"
         style={{
-          gridTemplateColumns: "80px 1fr 72px 120px 80px 148px 24px",
+          gridTemplateColumns: "80px 100px 1fr 72px 120px 80px 148px 24px",
         }}
       >
         <span>Gesprek</span>
+        <span>Datum</span>
         <span>Beschrijving &amp; tactieken</span>
         <span>Duur</span>
         <span>Bank</span>
@@ -349,13 +369,25 @@ export function CallsTable({ vault, callIds }: Props) {
                     : "bg-[var(--background-card)] hover:bg-[var(--background-elev)]",
                 ].join(" ")}
                 style={{
-                  gridTemplateColumns: "80px 1fr 72px 120px 80px 148px 24px",
+                  gridTemplateColumns: "80px 100px 1fr 72px 120px 80px 148px 24px",
                 }}
               >
                 {/* ID */}
                 <span className="font-mono text-[11px] text-[var(--muted)]">
                   {row.id}
                 </span>
+
+                {/* Date */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[11px] text-[var(--foreground)]">
+                    {row.startedAt ? formatDate(row.startedAt) : "—"}
+                  </span>
+                  {row.startedAt && (
+                    <span className="text-[10px] tabular-nums text-[var(--muted)]">
+                      {formatTime(row.startedAt)}
+                    </span>
+                  )}
+                </div>
 
                 {/* Tactics */}
                 <div className="flex flex-wrap gap-1 min-w-0">
