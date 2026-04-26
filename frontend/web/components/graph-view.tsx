@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ForceGraph, NODE_COLORS, NODE_TYPE_LABELS } from "./force-graph";
-import { MarkdownDrawer } from "./markdown-drawer";
 import { useBus } from "@/lib/sse";
 import type { GraphData, GraphNode, GraphNodeType, GraphEdge } from "@/lib/vault-reader";
 
@@ -128,27 +127,35 @@ export function GraphView({ initialData }: GraphViewProps) {
   }, [resetBus]);
 
   const handleNodeClick = useCallback((node: GraphNode) => {
-    setSelectedId(node.id);
+    setSelectedId((prev) => (prev === node.id ? null : node.id));
   }, []);
 
-  const handleWikilinkClick = useCallback(
-    (id: string) => {
-      if (knownIds.has(id)) setSelectedId(id);
-    },
-    [knownIds],
-  );
+  const handleDeselect = useCallback(() => setSelectedId(null), []);
 
-  const handleCloseDrawer = useCallback(() => setSelectedId(null), []);
+  // Dismiss selection on Escape key
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") handleDeselect(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleDeselect]);
 
+  // 1-hop neighborhood of selectedId: selected node + all direct neighbors
+  const neighborhoodIds = useMemo<ReadonlySet<string>>(() => {
+    if (!selectedId) return new Set();
+    const ids = new Set<string>([selectedId]);
+    for (const e of data.edges) {
+      if (e.source === selectedId) ids.add(e.target);
+      if (e.target === selectedId) ids.add(e.source);
+    }
+    return ids;
+  }, [selectedId, data.edges]);
+
+  // Legend counts — Partial record so it's safe for any GraphNodeType set
   const counts = useMemo(() => {
-    const m: Record<GraphNodeType, number> = {
-      call: 0,
-      scammer: 0,
-      iban: 0,
-      bank: 0,
-      script: 0,
-    };
-    for (const n of data.nodes) m[n.type]++;
+    const m: Partial<Record<GraphNodeType, number>> = {};
+    for (const n of data.nodes) {
+      m[n.type] = (m[n.type] ?? 0) + 1;
+    }
     return m;
   }, [data.nodes]);
 
@@ -185,7 +192,7 @@ export function GraphView({ initialData }: GraphViewProps) {
                   style={{ backgroundColor: NODE_COLORS[t] }}
                 />
                 <span className="text-[var(--foreground)]">{NODE_TYPE_LABELS[t]}</span>
-                <span className="font-mono tabular-nums text-[var(--muted-2)]">{counts[t]}</span>
+                <span className="font-mono tabular-nums text-[var(--muted-2)]">{counts[t] ?? 0}</span>
               </div>
             ))}
           </div>
@@ -218,16 +225,175 @@ export function GraphView({ initialData }: GraphViewProps) {
           data={data}
           highlightedIds={highlightIds}
           selectedId={selectedId}
+          neighborhoodIds={neighborhoodIds}
           onNodeClick={handleNodeClick}
         />
+        {selectedNode && (
+          <NodeInfoCard node={selectedNode} onClose={handleDeselect} />
+        )}
       </div>
-
-      <MarkdownDrawer
-        node={selectedNode}
-        knownIds={knownIds}
-        onClose={handleCloseDrawer}
-        onWikilinkClick={handleWikilinkClick}
-      />
     </div>
+  );
+}
+
+// ─── NodeInfoCard ────────────────────────────────────────────────────────────
+
+function NodeInfoCard({ node, onClose }: { node: GraphNode; onClose: () => void }) {
+  const fm = node.frontmatter as Record<string, unknown>;
+  const color = NODE_COLORS[node.type] ?? "#e8eaed";
+
+  const toStringArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.map(String) : [];
+
+  const stripWikilink = (s: string) => s.replace(/^\[\[|\]\]$/g, "");
+
+  return (
+    <div
+      className="pointer-events-auto absolute bottom-5 left-1/2 z-20 w-[440px] max-w-[90vw] -translate-x-1/2 rounded-xl border backdrop-blur-md"
+      style={{
+        background: "rgba(14,19,24,0.93)",
+        borderColor: `${color}33`,
+        boxShadow: `0 0 40px ${color}12, 0 8px 32px rgba(0,0,0,0.65)`,
+      }}
+    >
+      <div className="p-4">
+        {/* Header */}
+        <div className="mb-3 flex items-center gap-2.5">
+          <span
+            className="h-3 w-3 flex-shrink-0 rounded-full"
+            style={{ background: color, boxShadow: `0 0 8px ${color}` }}
+          />
+          <span className="text-sm font-semibold" style={{ color }}>
+            {node.label ?? node.id}
+          </span>
+          <span className="ml-auto text-[10px] uppercase tracking-widest text-[var(--muted)]">
+            {NODE_TYPE_LABELS[node.type]}
+          </span>
+          <button
+            onClick={onClose}
+            className="ml-2 text-lg leading-none text-[var(--muted)] transition hover:text-[var(--foreground)]"
+            aria-label="Sluiten"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Type-specific fields */}
+        {node.type === "scammer" && (
+          <div className="flex flex-col gap-2">
+            <InfoRow label="Gezien in">
+              <ChipList items={toStringArray(fm.seen_in_calls).map(stripWikilink)} color="#00cfff" />
+            </InfoRow>
+            {fm.location != null && (
+              <InfoRow label="Locatie">
+                <ChipList items={[stripWikilink(String(fm.location))]} color="#a78bfa" />
+              </InfoRow>
+            )}
+            {fm.notes != null && (
+              <InfoRow label="Notities">
+                <span className="text-[11px] text-[var(--muted)]">{String(fm.notes)}</span>
+              </InfoRow>
+            )}
+          </div>
+        )}
+
+        {node.type === "call" && (
+          <div className="flex flex-col gap-2">
+            {fm.scammer != null && (
+              <InfoRow label="Scammer">
+                <ChipList items={[stripWikilink(String(fm.scammer))]} color="#ff4444" />
+              </InfoRow>
+            )}
+            {fm.claimed_bank != null && (
+              <InfoRow label="Doet zich voor als">
+                <ChipList items={[String(fm.claimed_bank)]} color="#33ff99" />
+              </InfoRow>
+            )}
+            {fm.script != null && (
+              <InfoRow label="Script">
+                <ChipList items={[stripWikilink(String(fm.script))]} color="#cc66ff" />
+              </InfoRow>
+            )}
+            {fm.duration_s != null && (
+              <InfoRow label="Duur">
+                <span className="text-[11px] text-[var(--foreground)]">
+                  {Math.floor(Number(fm.duration_s) / 60)}m {Number(fm.duration_s) % 60}s
+                </span>
+              </InfoRow>
+            )}
+          </div>
+        )}
+
+        {node.type === "location" && (
+          <div className="flex flex-col gap-2">
+            <InfoRow label="Stad">
+              <span className="text-[11px] text-[var(--foreground)]">
+                {fm.city ? String(fm.city) : node.id}
+                {fm.country_code ? `, ${String(fm.country_code)}` : ""}
+              </span>
+            </InfoRow>
+            <InfoRow label="Gesprekken">
+              <ChipList items={toStringArray(fm.seen_in_calls).map(stripWikilink)} color="#00cfff" />
+            </InfoRow>
+          </div>
+        )}
+
+        {node.type === "bank" && (
+          <div className="flex flex-col gap-2">
+            <InfoRow label="Gesprekken">
+              <ChipList items={toStringArray(fm.referenced_in_calls).map(stripWikilink)} color="#00cfff" />
+            </InfoRow>
+          </div>
+        )}
+
+        {node.type === "script" && (
+          <div className="flex flex-col gap-2">
+            {fm.description != null && (
+              <InfoRow label="Omschrijving">
+                <span className="line-clamp-2 text-[11px] text-[var(--muted)]">
+                  {String(fm.description)}
+                </span>
+              </InfoRow>
+            )}
+            <InfoRow label="Gesprekken">
+              <ChipList items={toStringArray(fm.seen_in_calls).map(stripWikilink)} color="#00cfff" />
+            </InfoRow>
+          </div>
+        )}
+
+        <p className="mt-3 text-[10px] text-[#383e47]">
+          druk Esc om te deselecteren · klik opnieuw om te sluiten
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="min-w-[80px] flex-shrink-0 pt-0.5 text-[10px] text-[var(--muted)]">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1">{children}</div>
+    </div>
+  );
+}
+
+function ChipList({ items, color }: { items: string[]; color: string }) {
+  if (items.length === 0)
+    return <span className="text-[10px] text-[var(--muted-2)]">—</span>;
+  return (
+    <>
+      {items.map((item) => (
+        <span
+          key={item}
+          className="rounded-full border px-2 py-0.5 text-[10px] font-medium"
+          style={{ color, borderColor: color, background: `${color}12` }}
+        >
+          {item}
+        </span>
+      ))}
+    </>
   );
 }
