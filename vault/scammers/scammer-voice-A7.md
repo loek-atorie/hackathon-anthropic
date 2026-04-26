@@ -3,6 +3,7 @@ type: scammer
 cluster_id: scammer-voice-A7
 first_seen: 2026-04-18T11:04:22Z
 seen_in_calls: ["[[call-0031]]", "[[call-0033]]", "[[call-0035]]", "[[call-0038]]"]
+location: "[[amsterdam]]"
 notes: "ING fraude-team script. Mannenstem, midden 30, Randstad-accent. Gebruikt vaak zinsnede 'zeer urgent, mevrouw'."
 ---
 # Scammer cluster A7
