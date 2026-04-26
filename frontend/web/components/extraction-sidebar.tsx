@@ -16,7 +16,7 @@ interface FieldSpec {
 
 const FIELD_ORDER: FieldSpec[] = [
   { field: "claimed_bank", label: "Bank", placeholder: "wachten op extractie..." },
-  { field: "iban", label: "IBAN", placeholder: "wachten op extractie..." },
+  { field: "location", label: "Locatie", placeholder: "wachten op extractie..." },
   {
     field: "callback_number",
     label: "Callback nummer",
@@ -32,11 +32,6 @@ const FIELD_ORDER: FieldSpec[] = [
 ];
 
 type FieldValue = string | string[] | number | undefined;
-
-function formatIban(raw: string): string {
-  const compact = raw.replace(/\s+/g, "").toUpperCase();
-  return compact.match(/.{1,4}/g)?.join(" ") ?? compact;
-}
 
 function urgencyLabel(score: number): string {
   if (score >= 0.8) return "kritiek";
@@ -114,10 +109,10 @@ function CardValue({ field, value }: { field: ExtractionField; value: FieldValue
         </p>
       );
 
-    case "iban":
+    case "location":
       return (
-        <p className="font-mono text-lg tabular-nums tracking-wider text-[var(--foreground)]">
-          {formatIban(String(value))}
+        <p className="text-xl font-medium text-[var(--foreground)]">
+          {String(value)}
         </p>
       );
 
