@@ -26,7 +26,7 @@ export const NODE_TYPE_LABELS: Record<GraphNodeType, string> = {
   script:   "Script",
 };
 
-// Zone centers as fractions of canvas dimensions (used for cluster forces + ghost ellipses)
+// Zone target centers as fractions of canvas — used only for the cluster force.
 const ZONE_FX: Record<GraphNodeType, number> = {
   scammer:  0.20,
   call:     0.50,
@@ -44,12 +44,10 @@ const ZONE_FY: Record<GraphNodeType, number> = {
 
 /** Internal force-graph node — superset of GraphNode that the lib mutates. */
 type FGNode = GraphNode & {
-  // these are added by the simulation
   x?: number;
   y?: number;
   vx?: number;
   vy?: number;
-  // our own metadata
   degree: number;
   highlightUntil?: number;
 };
@@ -62,13 +60,63 @@ type FGLink = {
 
 interface ForceGraphProps {
   data: GraphData;
-  /** ids that should be visually highlighted (e.g. just-inserted call). */
   highlightedIds?: ReadonlySet<string>;
   onNodeClick?: (node: GraphNode) => void;
-  /** Optional currently-selected node id — drawn with a ring. */
   selectedId?: string | null;
-  /** When non-empty, all nodes NOT in this set are dimmed to ~8% opacity. */
   neighborhoodIds?: ReadonlySet<string>;
+}
+
+/** Draw a rounded ellipse that encloses a cluster of nodes on the canvas. */
+function drawClusterZone(
+  ctx: CanvasRenderingContext2D,
+  nodes: FGNode[],
+  color: string,
+  label: string,
+  globalScale: number,
+) {
+  const positioned = nodes.filter((n) => n.x != null && n.y != null);
+  if (positioned.length === 0) return;
+
+  // Compute bounding box of the cluster nodes with padding
+  const PAD = 32 / globalScale;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of positioned) {
+    const r = 4 + Math.min(8, Math.sqrt(n.degree) * 1.7);
+    minX = Math.min(minX, (n.x ?? 0) - r);
+    maxX = Math.max(maxX, (n.x ?? 0) + r);
+    minY = Math.min(minY, (n.y ?? 0) - r);
+    maxY = Math.max(maxY, (n.y ?? 0) + r);
+  }
+
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const rx = Math.max(28 / globalScale, (maxX - minX) / 2 + PAD);
+  const ry = Math.max(22 / globalScale, (maxY - minY) / 2 + PAD);
+
+  // Ellipse fill
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.06;
+  ctx.fill();
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.18;
+  ctx.lineWidth = 1 / globalScale;
+  ctx.stroke();
+  ctx.restore();
+
+  // Label above the ellipse
+  ctx.save();
+  const fontSize = Math.max(7, 10 / globalScale);
+  ctx.font = `700 ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.35;
+  ctx.letterSpacing = "0.1em";
+  ctx.fillText(label, cx, cy - ry - 4 / globalScale);
+  ctx.restore();
 }
 
 export function ForceGraph(props: ForceGraphProps) {
@@ -76,11 +124,12 @@ export function ForceGraph(props: ForceGraphProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<unknown>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
-  // Wall-clock used to drive the highlight pulse. We keep it in a ref + a
-  // re-render counter so we don't re-mount the graph on every tick.
   const [, setTick] = useState(0);
 
-  // Compute degrees and build node/link lists for the simulation.
+  // Keep a ref to fgNodes so onRenderFramePre can read current positions
+  // without closing over a stale value.
+  const fgNodesRef = useRef<FGNode[]>([]);
+
   const { fgNodes, fgLinks, nodeTypeMap } = useMemo(() => {
     const degree = new Map<string, number>();
     for (const e of data.edges) {
@@ -97,10 +146,16 @@ export function ForceGraph(props: ForceGraphProps) {
       kind: e.kind,
     }));
     const typeMap = new Map<string, GraphNodeType>(nodes.map((n) => [n.id, n.type]));
+    fgNodesRef.current = nodes;
     return { fgNodes: nodes, fgLinks: links, nodeTypeMap: typeMap };
   }, [data]);
 
-  // Resize observer — keep the canvas in sync with its container.
+  // Keep ref in sync when simulation mutates positions
+  useEffect(() => {
+    fgNodesRef.current = fgNodes;
+  }, [fgNodes]);
+
+  // Resize observer
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -114,8 +169,7 @@ export function ForceGraph(props: ForceGraphProps) {
     return () => ro.disconnect();
   }, []);
 
-  // Run a re-render loop only while there's an active highlight, so the pulse
-  // animation visibly breathes.
+  // Pulse animation loop for newly-inserted nodes
   useEffect(() => {
     if (!highlightedIds || highlightedIds.size === 0) return;
     let rafId = 0;
@@ -127,10 +181,10 @@ export function ForceGraph(props: ForceGraphProps) {
     return () => cancelAnimationFrame(rafId);
   }, [highlightedIds]);
 
-  // Re-heat the simulation when nodes are added so new ones find a home.
+  // Re-heat when nodes are added
   useEffect(() => {
     const fg = fgRef.current as
-      | { d3ReheatSimulation?: () => void; d3Force?: (name: string, force: unknown) => unknown }
+      | { d3ReheatSimulation?: () => void }
       | null;
     if (!fg) return;
     fg.d3ReheatSimulation?.();
@@ -154,16 +208,13 @@ export function ForceGraph(props: ForceGraphProps) {
       const chargeForce = fg.d3Force("charge");
       chargeForce?.strength?.(-280);
 
-      // Custom cluster force: d3 simulation accepts any object that is callable
-      // and has an optional initialize(nodes) method. We directly nudge vx/vy
-      // each tick toward the zone center — no need for window.d3.
       if (size.w > 0 && size.h > 0) {
         const STRENGTH = 0.12;
-        let nodes: FGNode[] = [];
+        let simNodes: FGNode[] = [];
 
         const clusterForce = Object.assign(
           function () {
-            for (const n of nodes) {
+            for (const n of simNodes) {
               const tx = size.w * (ZONE_FX[n.type] ?? 0.5);
               const ty = size.h * (ZONE_FY[n.type] ?? 0.5);
               n.vx = (n.vx ?? 0) + (tx - (n.x ?? 0)) * STRENGTH;
@@ -172,7 +223,7 @@ export function ForceGraph(props: ForceGraphProps) {
           },
           {
             initialize(initNodes: FGNode[]) {
-              nodes = initNodes;
+              simNodes = initNodes;
             },
           },
         );
@@ -184,51 +235,8 @@ export function ForceGraph(props: ForceGraphProps) {
     }
   };
 
-  // Ghost zone ellipse definitions — rendered as SVG underlay behind the canvas.
-  const clusterZones = size.w > 0 && size.h > 0
-    ? (Object.keys(NODE_COLORS) as GraphNodeType[]).map((type) => ({
-        type,
-        cx: size.w * ZONE_FX[type],
-        cy: size.h * ZONE_FY[type],
-        rx: size.w * 0.10,
-        ry: size.h * 0.13,
-        color: NODE_COLORS[type],
-        label: NODE_TYPE_LABELS[type].toUpperCase(),
-      }))
-    : [];
-
   return (
     <div ref={containerRef} className="relative h-full w-full">
-      {/* Cluster ghost zones — decorative SVG underlay */}
-      {size.w > 0 && size.h > 0 && (
-        <svg
-          className="pointer-events-none absolute inset-0"
-          width={size.w}
-          height={size.h}
-          aria-hidden
-        >
-          {clusterZones.map((z) => (
-            <g key={z.type}>
-              <ellipse
-                cx={z.cx} cy={z.cy} rx={z.rx} ry={z.ry}
-                fill={z.color} fillOpacity={0.04}
-                stroke={z.color} strokeOpacity={0.12} strokeWidth={1}
-              />
-              <text
-                x={z.cx} y={z.cy - z.ry - 8}
-                textAnchor="middle"
-                fill={z.color} fillOpacity={0.3}
-                fontSize={9} fontWeight={700}
-                letterSpacing="0.1em"
-                style={{ fontFamily: "ui-sans-serif, system-ui, sans-serif" }}
-              >
-                {z.label}
-              </text>
-            </g>
-          ))}
-        </svg>
-      )}
-
       {size.w > 0 && size.h > 0 ? (
         <ForceGraph2D
           ref={onEngineRef as never}
@@ -237,6 +245,25 @@ export function ForceGraph(props: ForceGraphProps) {
           graphData={{ nodes: fgNodes, links: fgLinks }}
           backgroundColor="rgba(7, 8, 10, 0)"
           nodeRelSize={4}
+          // Draw cluster zone ellipses on canvas BEFORE nodes, using live node positions
+          onRenderFramePre={(ctx, globalScale) => {
+            const nodes = fgNodesRef.current;
+            // Group nodes by type
+            const byType = new Map<GraphNodeType, FGNode[]>();
+            for (const n of nodes) {
+              if (!byType.has(n.type)) byType.set(n.type, []);
+              byType.get(n.type)!.push(n);
+            }
+            for (const [type, typeNodes] of byType) {
+              drawClusterZone(
+                ctx as CanvasRenderingContext2D,
+                typeNodes,
+                NODE_COLORS[type] ?? "#888",
+                NODE_TYPE_LABELS[type].toUpperCase(),
+                globalScale,
+              );
+            }
+          }}
           nodeCanvasObject={(node, ctx, globalScale) => {
             const n = node as FGNode;
             const baseR = 4 + Math.min(8, Math.sqrt(n.degree) * 1.7);
@@ -261,7 +288,7 @@ export function ForceGraph(props: ForceGraphProps) {
               ctx.globalAlpha = 1;
             }
 
-            // Selected: double ring (outer faint, inner solid)
+            // Selected: double ring
             if (isSelected) {
               ctx.globalAlpha = 0.2;
               ctx.beginPath();
@@ -280,13 +307,11 @@ export function ForceGraph(props: ForceGraphProps) {
               ctx.globalAlpha = 1;
             }
 
-            // The node itself.
+            // Node fill
             ctx.globalAlpha = isDimmed ? 0.08 : 1;
             ctx.beginPath();
             ctx.arc(x, y, baseR, 0, Math.PI * 2);
             ctx.fillStyle = color;
-
-            // Glow for non-dimmed nodes
             if (!isDimmed) {
               ctx.shadowColor = color;
               ctx.shadowBlur = isSelected ? 12 : 5;
@@ -341,17 +366,14 @@ export function ForceGraph(props: ForceGraphProps) {
             const srcType = nodeTypeMap.get(src.id);
             const tgtType = nodeTypeMap.get(tgt.id);
 
-            // Edge color matches target node type
             const edgeColor = NODE_COLORS[tgtType ?? "call"] ?? "rgba(232,234,237,0.18)";
 
-            // Semantic label
             let edgeLabel = "linked";
-            if (srcType === "call" && tgtType === "scammer")        edgeLabel = "identified as";
+            if (srcType === "call" && tgtType === "scammer")          edgeLabel = "identified as";
             else if (srcType === "scammer" && tgtType === "location") edgeLabel = "operates from";
-            else if (srcType === "call" && tgtType === "bank")       edgeLabel = "impersonated";
-            else if (srcType === "call" && tgtType === "script")     edgeLabel = "used script";
+            else if (srcType === "call" && tgtType === "bank")        edgeLabel = "impersonated";
+            else if (srcType === "call" && tgtType === "script")      edgeLabel = "used script";
 
-            // Dimming: fade edges where either endpoint is outside the neighborhood
             const srcIn = !neighborhoodIds || neighborhoodIds.size === 0 || neighborhoodIds.has(src.id);
             const tgtIn = !neighborhoodIds || neighborhoodIds.size === 0 || neighborhoodIds.has(tgt.id);
             const edgeDimmed = !(srcIn && tgtIn);
@@ -376,21 +398,15 @@ export function ForceGraph(props: ForceGraphProps) {
               const arrowAngle = 0.4;
               ctx.beginPath();
               ctx.moveTo(ax, ay);
-              ctx.lineTo(
-                ax - arrowLen * Math.cos(angle - arrowAngle),
-                ay - arrowLen * Math.sin(angle - arrowAngle),
-              );
-              ctx.lineTo(
-                ax - arrowLen * Math.cos(angle + arrowAngle),
-                ay - arrowLen * Math.sin(angle + arrowAngle),
-              );
+              ctx.lineTo(ax - arrowLen * Math.cos(angle - arrowAngle), ay - arrowLen * Math.sin(angle - arrowAngle));
+              ctx.lineTo(ax - arrowLen * Math.cos(angle + arrowAngle), ay - arrowLen * Math.sin(angle + arrowAngle));
               ctx.closePath();
               ctx.fillStyle = edgeColor;
               ctx.globalAlpha = edgeAlpha;
               ctx.fill();
             }
 
-            // Edge labels only when a node is selected (neighborhood active) — avoids clutter
+            // Edge labels only when neighborhood is active (node selected)
             const showLabel = !edgeDimmed && neighborhoodIds && neighborhoodIds.size > 0;
             if (showLabel) {
               const mx = (src.x + tgt.x) / 2;
