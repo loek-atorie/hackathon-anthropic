@@ -150,38 +150,37 @@ export function ForceGraph(props: ForceGraphProps) {
     if (!fg) return;
     try {
       const linkForce = fg.d3Force("link");
-      linkForce?.distance?.(80);
+      linkForce?.distance?.(60);
       const chargeForce = fg.d3Force("charge");
-      chargeForce?.strength?.(-220);
+      chargeForce?.strength?.(-280);
 
-      // Soft cluster attraction — same-type nodes drift toward their zone center.
-      // Strength 0.06 is intentionally weak so cross-cluster edges can pull nodes between zones.
-      const d3 = (
-        window as unknown as {
-          d3?: {
-            forceX: (fn: (n: unknown) => number) => { strength: (s: number) => unknown };
-            forceY: (fn: (n: unknown) => number) => { strength: (s: number) => unknown };
-          };
-        }
-      ).d3;
-      if (d3 && size.w > 0 && size.h > 0) {
-        fg.d3Force(
-          "clusterX",
-          d3.forceX((node: unknown) => {
-            const n = node as FGNode;
-            return size.w * (ZONE_FX[n.type] ?? 0.5);
-          }).strength(0.06),
+      // Custom cluster force: d3 simulation accepts any object that is callable
+      // and has an optional initialize(nodes) method. We directly nudge vx/vy
+      // each tick toward the zone center — no need for window.d3.
+      if (size.w > 0 && size.h > 0) {
+        const STRENGTH = 0.12;
+        let nodes: FGNode[] = [];
+
+        const clusterForce = Object.assign(
+          function () {
+            for (const n of nodes) {
+              const tx = size.w * (ZONE_FX[n.type] ?? 0.5);
+              const ty = size.h * (ZONE_FY[n.type] ?? 0.5);
+              n.vx = (n.vx ?? 0) + (tx - (n.x ?? 0)) * STRENGTH;
+              n.vy = (n.vy ?? 0) + (ty - (n.y ?? 0)) * STRENGTH;
+            }
+          },
+          {
+            initialize(initNodes: FGNode[]) {
+              nodes = initNodes;
+            },
+          },
         );
-        fg.d3Force(
-          "clusterY",
-          d3.forceY((node: unknown) => {
-            const n = node as FGNode;
-            return size.h * (ZONE_FY[n.type] ?? 0.5);
-          }).strength(0.06),
-        );
+
+        fg.d3Force("cluster", clusterForce);
       }
     } catch {
-      // Some d3 versions don't expose these; clustering degrades gracefully.
+      // Not fatal — graph renders without clustering.
     }
   };
 
@@ -191,8 +190,8 @@ export function ForceGraph(props: ForceGraphProps) {
         type,
         cx: size.w * ZONE_FX[type],
         cy: size.h * ZONE_FY[type],
-        rx: size.w * 0.13,
-        ry: size.h * 0.16,
+        rx: size.w * 0.10,
+        ry: size.h * 0.13,
         color: NODE_COLORS[type],
         label: NODE_TYPE_LABELS[type].toUpperCase(),
       }))
@@ -391,8 +390,9 @@ export function ForceGraph(props: ForceGraphProps) {
               ctx.fill();
             }
 
-            // Edge label — always visible (no zoom gate), only when not dimmed
-            if (!edgeDimmed) {
+            // Edge labels only when a node is selected (neighborhood active) — avoids clutter
+            const showLabel = !edgeDimmed && neighborhoodIds && neighborhoodIds.size > 0;
+            if (showLabel) {
               const mx = (src.x + tgt.x) / 2;
               const my = (src.y + tgt.y) / 2;
               const fontSize = Math.max(6, 8 / globalScale);
