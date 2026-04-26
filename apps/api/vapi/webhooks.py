@@ -68,9 +68,18 @@ async def vapi_webhook(request: Request) -> dict[str, Any]:
             "t_offset_ms": t_offset_ms,
         }
         await bus.publish(event)
-        await _forward_to_p2("/ingest", {"call_id": call_id, "text": message.get("transcript", "")})
-        # Mirror to P2's SSE so the frontend (which subscribes to P2's /events) sees live transcripts
+        # Mirror to P2's SSE so the frontend (which subscribes to P2's /events) sees live transcripts.
+        # Both partials and finals fan out here so the dialogue feels real-time.
         await _forward_to_p2("/publish", event)
+        # Only finalized utterances drive Claude extraction — partials would fire
+        # the /ingest pipeline 5-10x per sentence with no new information, burning
+        # tokens and producing duplicate extraction_update events.
+        if message.get("transcriptType") == "final":
+            await _forward_to_p2("/ingest", {
+                "call_id": call_id,
+                "text": message.get("transcript", ""),
+                "t_offset_ms": t_offset_ms,
+            })
 
     elif msg_type == "function-call":
         # Mevrouw's nudge tool round-trips through here in Step 5.
