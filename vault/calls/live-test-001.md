@@ -1,7 +1,7 @@
 ---
 type: call
 id: live-test-001
-recorded_at: 2026-04-25T16:04:19Z
+started_at: 2026-04-25T16:04:19Z
 language: nl
 claimed_organisation: "[[ING]]"
 script: "[[bank-helpdesk]]"
