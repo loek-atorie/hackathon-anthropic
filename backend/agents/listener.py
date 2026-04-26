@@ -26,6 +26,34 @@ PUBLISH_URL = os.getenv("PUBLISH_URL", "http://localhost:8000/publish")
 
 _client = anthropic.AsyncAnthropic()
 
+# Per-call last-emitted-value-per-field, used for diffing so we only publish
+# extraction_update events when a field's value actually changes. Cleared on
+# end-of-call (see cleanup_call below).
+_call_extractions: dict[str, dict[str, object]] = {}
+
+# Wire-level field names match the frontend's ExtractionField union (see
+# frontend/web/lib/types.ts). The backend's `claimed_organisation` is broader
+# than the dashboard's "BANK" label but maps onto the same wire field.
+_WIRE_FIELDS = (
+    "claimed_bank",
+    "iban",
+    "callback_number",
+    "tactics",
+    "urgency_score",
+    "script_signature",
+)
+
+
+def _wire_value(extraction: "Extraction", wire_field: str) -> object:
+    if wire_field == "claimed_bank":
+        return extraction.claimed_organisation
+    return getattr(extraction, wire_field, None)
+
+
+def cleanup_call(call_id: str) -> None:
+    """Drop diffing state for a call so memory doesn't grow with call count."""
+    _call_extractions.pop(call_id, None)
+
 # Tool schema drives Claude's output shape — acts as the extraction contract.
 _EXTRACT_TOOL = {
     "name": "emit_extraction",
@@ -158,17 +186,45 @@ async def extract(transcript: str) -> Extraction:
     return Extraction()
 
 
-async def process_and_publish(transcript: str, call_id: str) -> Extraction:
+async def process_and_publish(
+    transcript: str, call_id: str, t_offset_ms: int = 0
+) -> Extraction:
     """Extract entities, broadcast to SSE bus, write vault files. Returns the Extraction."""
     extraction = await extract(transcript)
 
-    # Publish extraction to SSE bus so P3's dashboard updates immediately
+    # Publish full snapshot (legacy "extraction" type — frontend ignores it but
+    # keeping it doesn't break anything and may help future consumers/debugging).
     payload = {"type": "extraction", "call_id": call_id, **extraction.model_dump()}
     async with httpx.AsyncClient() as http:
         try:
             await http.post(PUBLISH_URL, json=payload, timeout=5.0)
         except httpx.RequestError:
             pass  # server not running in standalone test mode
+
+        # Per-field extraction_update events: one per field that became
+        # populated or changed since the last extraction for this call. This
+        # is the shape /live's ExtractionSidebar renders.
+        last = _call_extractions.setdefault(call_id, {})
+        for wire_field in _WIRE_FIELDS:
+            value = _wire_value(extraction, wire_field)
+            # Skip falsy/empty so the sidebar keeps its "wachten op extractie..."
+            # placeholder until Claude actually has something to report.
+            if value in (None, "", 0, []):
+                continue
+            if last.get(wire_field) == value:
+                continue
+            last[wire_field] = value
+            update_event = {
+                "type": "extraction_update",
+                "call_id": call_id,
+                "t_offset_ms": t_offset_ms,
+                "field": wire_field,
+                "value": value,
+            }
+            try:
+                await http.post(PUBLISH_URL, json=update_event, timeout=5.0)
+            except httpx.RequestError:
+                pass
 
     # Write vault files only for confirmed scams (confidence >= 0.7)
     # Run in thread pool — file I/O must not block the async event loop

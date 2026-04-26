@@ -66,7 +66,11 @@ async def ingest(payload: dict, background_tasks: BackgroundTasks):
     call_id = payload.get("call_id", f"call-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}")
     if not transcript.strip():
         return {"status": "ignored", "reason": "empty transcript"}
-    background_tasks.add_task(process_and_publish, transcript, call_id)
+    try:
+        t_offset_ms = int(payload.get("t_offset_ms", 0))
+    except (TypeError, ValueError):
+        t_offset_ms = 0
+    background_tasks.add_task(process_and_publish, transcript, call_id, t_offset_ms)
     return {"status": "processing", "call_id": call_id}
 
 
@@ -76,7 +80,7 @@ async def call_ended(payload: dict, background_tasks: BackgroundTasks):
     Runs final extraction on the accumulated transcript (if any), then
     generates stakeholder reports and finalizes vault files.
     """
-    from agents.listener import process_and_publish
+    from agents.listener import cleanup_call
     call_id = payload.get("call_id", "")
     duration_s = payload.get("duration_s", 0)
     if not call_id:
@@ -92,6 +96,7 @@ async def call_ended(payload: dict, background_tasks: BackgroundTasks):
     }
     for q in list(_subscribers):
         await q.put(call_ended_event)
+    cleanup_call(call_id)
     return {"status": "ok", "call_id": call_id}
 
 
